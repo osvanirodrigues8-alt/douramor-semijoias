@@ -24,9 +24,8 @@ Deno.serve(async (req) => {
 
     // Load catálogo (resumo)
     const { data: produtos } = await supabase.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40);
-
-    // Load cupons ativos
     const { data: cupons } = await supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true);
+    const { data: faqs } = await supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true });
 
     // Find or create cliente by contato (optional)
     let cliente_id: string | null = null;
