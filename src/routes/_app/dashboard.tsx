@@ -43,7 +43,7 @@ function Dashboard() {
       </div>
 
       <Card className="p-8 text-center text-sm text-muted-foreground">
-        Bem-vinda ao JoiaBot 💛 — comece cadastrando produtos e configurando o agente.
+        Bem-vinda ao Douramor Semi Joias 💛 — comece cadastrando produtos e configurando o agente.
       </Card>
     </div>
   );
