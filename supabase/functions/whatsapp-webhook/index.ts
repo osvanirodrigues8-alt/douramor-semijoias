@@ -16,29 +16,31 @@ Deno.serve(async (req) => {
     const payload = await req.json().catch(() => ({}));
     console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 2000));
 
-    // Evolution/Stevo envia em formatos parecidos com:
-    // { event: "messages.upsert", data: { key: { remoteJid, fromMe, id }, message: { conversation | extendedTextMessage.text }, pushName } }
+    // A Stevo pode enviar no formato Evolution (key/message) ou Go WhatsApp (Info/Message).
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
-    const fromMe = key?.fromMe === true;
-    const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid;
-    const pushName: string | undefined = data?.pushName ?? data?.notifyName;
+    const info = data?.Info ?? data?.info ?? {};
+    const message = data?.message ?? data?.Message ?? {};
+    const fromMe = key?.fromMe === true || info?.IsFromMe === true;
+    const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
+    const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
 
     const text: string | undefined =
-      data?.message?.conversation ??
-      data?.message?.extendedTextMessage?.text ??
-      data?.message?.text ??
+      message?.conversation ??
+      message?.extendedTextMessage?.text ??
+      message?.text ??
       data?.text ??
       payload?.message;
 
     if (fromMe || !remoteJid || !text) {
+      console.log("[stevo-webhook] ignored", JSON.stringify({ fromMe, remoteJid, hasText: Boolean(text) }));
       return new Response(JSON.stringify({ ok: true, ignored: true, reason: fromMe ? "fromMe" : !remoteJid ? "no jid" : "no text" }), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
     // Número limpo (sem @s.whatsapp.net e sem grupos)
-    if (remoteJid.includes("@g.us")) {
+    if (remoteJid.includes("@g.us") || info?.IsGroup === true) {
       return new Response(JSON.stringify({ ok: true, ignored: "group" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
