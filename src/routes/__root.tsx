@@ -15,10 +15,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "JoiaBot — Painel" },
+      { title: "Douramor Semi Joias — Painel" },
       { name: "description", content: "Painel de gestão para sua loja de semi joias com agente conversacional inteligente." },
-      { property: "og:title", content: "JoiaBot — Painel" },
-      { name: "twitter:title", content: "JoiaBot — Painel" },
+      { property: "og:title", content: "Douramor Semi Joias — Painel" },
+      { name: "twitter:title", content: "Douramor Semi Joias — Painel" },
       { property: "og:description", content: "Painel de gestão para sua loja de semi joias com agente conversacional inteligente." },
       { name: "twitter:description", content: "Painel de gestão para sua loja de semi joias com agente conversacional inteligente." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f645ab14-1bd2-4b04-bdb8-672390836242/id-preview-34c4106d--6be2b527-c471-46c2-89cc-0e7edb1b07a7.lovable.app-1778702251134.png" },

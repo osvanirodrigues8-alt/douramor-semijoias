@@ -41,7 +41,7 @@ function AppLayout() {
       <aside className="w-64 border-r flex flex-col sticky top-0 h-screen">
         <div className="p-6 flex items-center gap-2">
           <div className="size-6 rounded-sm bg-brand ring-1 ring-brand/20" />
-          <span className="text-sm font-semibold tracking-tight">JoiaBot</span>
+          <span className="text-sm font-semibold tracking-tight">Douramor Semi Joias</span>
         </div>
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">

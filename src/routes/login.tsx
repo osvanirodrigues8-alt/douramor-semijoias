@@ -42,7 +42,7 @@ function LoginPage() {
       <div className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-brand/10 via-background to-background border-r">
         <div className="flex items-center gap-2">
           <div className="size-7 rounded-sm bg-brand ring-1 ring-brand/20" />
-          <span className="font-semibold tracking-tight">JoiaBot</span>
+          <span className="font-semibold tracking-tight">Douramor Semi Joias</span>
         </div>
         <div className="space-y-4 max-w-md">
           <h1 className="text-3xl font-semibold tracking-tight text-balance">
@@ -52,7 +52,7 @@ function LoginPage() {
             Centralize WhatsApp, Instagram e seu site num só painel. Sua agente virtual responde, vende e agenda — você acompanha tudo aqui.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} JoiaBot</p>
+        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} Douramor Semi Joias</p>
       </div>
 
       <div className="flex items-center justify-center p-8">
@@ -60,7 +60,7 @@ function LoginPage() {
           <div>
             <h2 className="text-xl font-semibold">{mode === "login" ? "Entrar no painel" : "Criar conta"}</h2>
             <p className="text-xs text-muted-foreground mt-1">
-              {mode === "login" ? "Acesse seu painel JoiaBot" : "A primeira conta criada será a de administrador"}
+              {mode === "login" ? "Acesse seu painel Douramor Semi Joias" : "A primeira conta criada será a de administrador"}
             </p>
           </div>
 
