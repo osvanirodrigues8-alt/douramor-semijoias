@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS "Admins update configuracoes" ON public.configuracoes;
+CREATE POLICY "Staff updates configuracoes" ON public.configuracoes FOR UPDATE USING (public.is_staff(auth.uid())) WITH CHECK (public.is_staff(auth.uid()));
