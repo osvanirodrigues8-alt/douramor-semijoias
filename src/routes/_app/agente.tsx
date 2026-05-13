@@ -49,10 +49,11 @@ function Agente() {
     if (!cfg) return;
     setSaving(true);
     const { id, atualizado_em, ...rest } = cfg;
-    const { error } = await supabase.from("configuracoes").update(rest).eq("id", id);
+    const { data, error } = await supabase.from("configuracoes").update({ ...rest, atualizado_em: new Date().toISOString() }).eq("id", id).select();
     setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Informações da empresa atualizadas — a IA já está usando.");
+    if (error) return toast.error(error.message);
+    if (!data || data.length === 0) return toast.error("Sem permissão para salvar. Faça login com uma conta de administrador.");
+    toast.success("Informações da empresa atualizadas — a IA já está usando.");
   };
 
   const send = async () => {
