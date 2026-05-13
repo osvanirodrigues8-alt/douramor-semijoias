@@ -139,6 +139,7 @@ export type Database = {
       configuracoes: {
         Row: {
           area_cobertura_entrega: string | null
+          assinatura: string | null
           atualizado_em: string
           descricao_loja: string | null
           diferenciais_loja: string | null
@@ -150,23 +151,37 @@ export type Database = {
           horario_atendimento_fim: string
           horario_atendimento_inicio: string
           id: string
+          idioma: string
           limite_desconto_negociacao: number
           max_parcelas: number
           mensagem_boas_vindas: string
+          mensagem_fora_horario: string | null
           modelo_ia: string
           nome_agente: string
           nome_loja: string
+          palavras_proibidas: string | null
           parcelamento_ativo: boolean
+          personalidade: string | null
+          politica_desconto: string | null
+          quando_transferir_humano: string | null
+          regras_extras: string | null
+          responder_fora_horario: boolean
+          saudacao_site: string | null
+          saudacao_whatsapp: string | null
+          tamanho_resposta: string
           taxa_entrega: number
           token_instagram: string | null
           token_whatsapp_api: string | null
           tom_padrao: string
+          topicos_proibidos: string | null
           url_whatsapp_api: string | null
+          uso_emoji: string
           valor_minimo_parcelamento: number
           whatsapp_humano: string | null
         }
         Insert: {
           area_cobertura_entrega?: string | null
+          assinatura?: string | null
           atualizado_em?: string
           descricao_loja?: string | null
           diferenciais_loja?: string | null
@@ -178,23 +193,37 @@ export type Database = {
           horario_atendimento_fim?: string
           horario_atendimento_inicio?: string
           id?: string
+          idioma?: string
           limite_desconto_negociacao?: number
           max_parcelas?: number
           mensagem_boas_vindas?: string
+          mensagem_fora_horario?: string | null
           modelo_ia?: string
           nome_agente?: string
           nome_loja?: string
+          palavras_proibidas?: string | null
           parcelamento_ativo?: boolean
+          personalidade?: string | null
+          politica_desconto?: string | null
+          quando_transferir_humano?: string | null
+          regras_extras?: string | null
+          responder_fora_horario?: boolean
+          saudacao_site?: string | null
+          saudacao_whatsapp?: string | null
+          tamanho_resposta?: string
           taxa_entrega?: number
           token_instagram?: string | null
           token_whatsapp_api?: string | null
           tom_padrao?: string
+          topicos_proibidos?: string | null
           url_whatsapp_api?: string | null
+          uso_emoji?: string
           valor_minimo_parcelamento?: number
           whatsapp_humano?: string | null
         }
         Update: {
           area_cobertura_entrega?: string | null
+          assinatura?: string | null
           atualizado_em?: string
           descricao_loja?: string | null
           diferenciais_loja?: string | null
@@ -206,18 +235,31 @@ export type Database = {
           horario_atendimento_fim?: string
           horario_atendimento_inicio?: string
           id?: string
+          idioma?: string
           limite_desconto_negociacao?: number
           max_parcelas?: number
           mensagem_boas_vindas?: string
+          mensagem_fora_horario?: string | null
           modelo_ia?: string
           nome_agente?: string
           nome_loja?: string
+          palavras_proibidas?: string | null
           parcelamento_ativo?: boolean
+          personalidade?: string | null
+          politica_desconto?: string | null
+          quando_transferir_humano?: string | null
+          regras_extras?: string | null
+          responder_fora_horario?: boolean
+          saudacao_site?: string | null
+          saudacao_whatsapp?: string | null
+          tamanho_resposta?: string
           taxa_entrega?: number
           token_instagram?: string | null
           token_whatsapp_api?: string | null
           tom_padrao?: string
+          topicos_proibidos?: string | null
           url_whatsapp_api?: string | null
+          uso_emoji?: string
           valor_minimo_parcelamento?: number
           whatsapp_humano?: string | null
         }
@@ -294,6 +336,39 @@ export type Database = {
           usos_realizados?: number
           validade?: string | null
           valor_desconto?: number
+        }
+        Relationships: []
+      }
+      faqs: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          categoria: string | null
+          criado_em: string
+          id: string
+          ordem: number
+          pergunta: string
+          resposta: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          categoria?: string | null
+          criado_em?: string
+          id?: string
+          ordem?: number
+          pergunta: string
+          resposta: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          categoria?: string | null
+          criado_em?: string
+          id?: string
+          ordem?: number
+          pergunta?: string
+          resposta?: string
         }
         Relationships: []
       }

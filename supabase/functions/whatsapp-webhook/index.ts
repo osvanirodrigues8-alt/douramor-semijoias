@@ -1,5 +1,6 @@
 // Webhook que recebe mensagens da Stevo (Evolution API) e responde via IA + envia de volta no WhatsApp.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { buildSystemPrompt } from "../_shared/prompt.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -70,26 +71,13 @@ Deno.serve(async (req) => {
 
     await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text });
 
-    // Catálogo + cupons
+    // Catálogo + cupons + faqs
     const { data: produtos } = await supabase.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40);
     const { data: cupons } = await supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true);
+    const { data: faqs } = await supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true });
     const { data: hist } = await supabase.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
 
-    const systemPrompt = `Você é ${cfg.nome_agente}, atendente virtual da loja "${cfg.nome_loja}".
-Tom: ${cfg.tom_padrao}. ${cfg.descricao_loja ?? ""}
-${cfg.diferenciais_loja ? `Diferenciais: ${cfg.diferenciais_loja}.` : ""}
-Horário: ${cfg.horario_atendimento_inicio} às ${cfg.horario_atendimento_fim}.
-Pagamento: ${(cfg.formas_pagamento_ativas ?? []).join(", ")}.
-${cfg.parcelamento_ativo ? `Parcelamos até ${cfg.max_parcelas}x acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Taxa entrega: R$ ${cfg.taxa_entrega}. ${cfg.area_cobertura_entrega ?? ""}
-Limite desconto: ${cfg.limite_desconto_negociacao}%.
-${cfg.whatsapp_humano ? `Atendimento humano: ${cfg.whatsapp_humano}.` : ""}
-
-CATÁLOGO:
-${(produtos ?? []).map((p: any) => `- ${p.nome} (${p.categoria}) — R$ ${p.preco} — estoque: ${p.quantidade_estoque}${p.descricao ? ` — ${p.descricao}` : ""}`).join("\n") || "Vazio."}
-${cupons?.length ? `\nCUPONS: ${cupons.map((c: any) => `${c.codigo} (${c.tipo_desconto === "percentual" ? c.valor_desconto + "%" : "R$ " + c.valor_desconto})`).join(", ")}` : ""}
-
-Responda em português, breve, acolhedora, sem inventar dados fora desta configuração. Use *negrito* WhatsApp e emojis com moderação.`;
+    const systemPrompt = buildSystemPrompt({ cfg, produtos: produtos ?? [], cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp" });
 
     const messages = [
       { role: "system", content: systemPrompt },
