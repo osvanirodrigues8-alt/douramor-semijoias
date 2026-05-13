@@ -12,8 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
+import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppCuponsRouteImport } from './routes/_app/cupons'
+import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
+import { Route as AppClientesRouteImport } from './routes/_app/clientes'
+import { Route as AppAvaliacoesRouteImport } from './routes/_app/avaliacoes'
+import { Route as AppAgenteRouteImport } from './routes/_app/agente'
+import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -29,9 +37,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppProdutosRoute = AppProdutosRouteImport.update({
   id: '/produtos',
   path: '/produtos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPedidosRoute = AppPedidosRouteImport.update({
+  id: '/pedidos',
+  path: '/pedidos',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -39,39 +57,125 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCuponsRoute = AppCuponsRouteImport.update({
+  id: '/cupons',
+  path: '/cupons',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppClientesRoute = AppClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAvaliacoesRoute = AppAvaliacoesRouteImport.update({
+  id: '/avaliacoes',
+  path: '/avaliacoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgenteRoute = AppAgenteRouteImport.update({
+  id: '/agente',
+  path: '/agente',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgendamentosRoute = AppAgendamentosRouteImport.update({
+  id: '/agendamentos',
+  path: '/agendamentos',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/agendamentos': typeof AppAgendamentosRoute
+  '/agente': typeof AppAgenteRoute
+  '/avaliacoes': typeof AppAvaliacoesRoute
+  '/clientes': typeof AppClientesRoute
+  '/configuracoes': typeof AppConfiguracoesRoute
+  '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
+  '/relatorios': typeof AppRelatoriosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/agendamentos': typeof AppAgendamentosRoute
+  '/agente': typeof AppAgenteRoute
+  '/avaliacoes': typeof AppAvaliacoesRoute
+  '/clientes': typeof AppClientesRoute
+  '/configuracoes': typeof AppConfiguracoesRoute
+  '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
+  '/relatorios': typeof AppRelatoriosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/agendamentos': typeof AppAgendamentosRoute
+  '/_app/agente': typeof AppAgenteRoute
+  '/_app/avaliacoes': typeof AppAvaliacoesRoute
+  '/_app/clientes': typeof AppClientesRoute
+  '/_app/configuracoes': typeof AppConfiguracoesRoute
+  '/_app/cupons': typeof AppCuponsRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/pedidos': typeof AppPedidosRoute
   '/_app/produtos': typeof AppProdutosRoute
+  '/_app/relatorios': typeof AppRelatoriosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/dashboard' | '/produtos'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/agendamentos'
+    | '/agente'
+    | '/avaliacoes'
+    | '/clientes'
+    | '/configuracoes'
+    | '/cupons'
+    | '/dashboard'
+    | '/pedidos'
+    | '/produtos'
+    | '/relatorios'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/dashboard' | '/produtos'
+  to:
+    | '/'
+    | '/login'
+    | '/agendamentos'
+    | '/agente'
+    | '/avaliacoes'
+    | '/clientes'
+    | '/configuracoes'
+    | '/cupons'
+    | '/dashboard'
+    | '/pedidos'
+    | '/produtos'
+    | '/relatorios'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
+    | '/_app/agendamentos'
+    | '/_app/agente'
+    | '/_app/avaliacoes'
+    | '/_app/clientes'
+    | '/_app/configuracoes'
+    | '/_app/cupons'
     | '/_app/dashboard'
+    | '/_app/pedidos'
     | '/_app/produtos'
+    | '/_app/relatorios'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -103,11 +207,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/relatorios': {
+      id: '/_app/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/produtos': {
       id: '/_app/produtos'
       path: '/produtos'
       fullPath: '/produtos'
       preLoaderRoute: typeof AppProdutosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pedidos': {
+      id: '/_app/pedidos'
+      path: '/pedidos'
+      fullPath: '/pedidos'
+      preLoaderRoute: typeof AppPedidosRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -117,17 +235,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/cupons': {
+      id: '/_app/cupons'
+      path: '/cupons'
+      fullPath: '/cupons'
+      preLoaderRoute: typeof AppCuponsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/configuracoes': {
+      id: '/_app/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AppConfiguracoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/clientes': {
+      id: '/_app/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof AppClientesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/avaliacoes': {
+      id: '/_app/avaliacoes'
+      path: '/avaliacoes'
+      fullPath: '/avaliacoes'
+      preLoaderRoute: typeof AppAvaliacoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agente': {
+      id: '/_app/agente'
+      path: '/agente'
+      fullPath: '/agente'
+      preLoaderRoute: typeof AppAgenteRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agendamentos': {
+      id: '/_app/agendamentos'
+      path: '/agendamentos'
+      fullPath: '/agendamentos'
+      preLoaderRoute: typeof AppAgendamentosRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAgendamentosRoute: typeof AppAgendamentosRoute
+  AppAgenteRoute: typeof AppAgenteRoute
+  AppAvaliacoesRoute: typeof AppAvaliacoesRoute
+  AppClientesRoute: typeof AppClientesRoute
+  AppConfiguracoesRoute: typeof AppConfiguracoesRoute
+  AppCuponsRoute: typeof AppCuponsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppPedidosRoute: typeof AppPedidosRoute
   AppProdutosRoute: typeof AppProdutosRoute
+  AppRelatoriosRoute: typeof AppRelatoriosRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAgendamentosRoute: AppAgendamentosRoute,
+  AppAgenteRoute: AppAgenteRoute,
+  AppAvaliacoesRoute: AppAvaliacoesRoute,
+  AppClientesRoute: AppClientesRoute,
+  AppConfiguracoesRoute: AppConfiguracoesRoute,
+  AppCuponsRoute: AppCuponsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppPedidosRoute: AppPedidosRoute,
   AppProdutosRoute: AppProdutosRoute,
+  AppRelatoriosRoute: AppRelatoriosRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
