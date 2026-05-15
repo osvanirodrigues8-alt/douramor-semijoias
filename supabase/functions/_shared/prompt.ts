@@ -71,9 +71,9 @@ ${faqs.map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`).join("\n\n")}`);
   }
 
   blocos.push(`# CATÁLOGO
-${(produtos ?? []).map((p) => `- ${p.nome} (${p.categoria}) — R$ ${p.preco} — estoque: ${p.quantidade_estoque}${p.url_produto ? ` — link: ${p.url_produto}` : ""}${p.descricao ? ` — ${p.descricao}` : ""}`).join("\n") || "Vazio."}
+${(produtos ?? []).map((p) => `- ${p.nome} (${p.categoria}${p.genero ? `, ${p.genero}` : ""}) — R$ ${p.preco} — estoque: ${p.quantidade_estoque}${p.url_produto ? ` — link: ${p.url_produto}` : ""}${p.descricao ? ` — ${p.descricao}` : ""}`).join("\n") || "Vazio."}
 
-Sempre que indicar um produto, envie o link (campo "link") junto, em uma linha separada, para a cliente abrir no site. Não invente links — use apenas os listados acima.`);
+Sempre que indicar um produto, envie o link (campo "link") junto, em uma linha separada, para a cliente abrir no site. Não invente links — use apenas os listados acima. Quando a pessoa pedir algo masculino ou feminino, recomende somente itens daquele gênero (ou unissex).`);
 
   if (cupons?.length) {
     blocos.push(`# CUPONS ATIVOS

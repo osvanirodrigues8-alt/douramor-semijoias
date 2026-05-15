@@ -50,6 +50,7 @@ function Produtos() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("todas");
   const [statusF, setStatusF] = useState<string>("todos");
+  const [genero, setGenero] = useState<string>("todos");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -74,9 +75,10 @@ function Produtos() {
       if (term && !(`${i.nome} ${i.descricao ?? ""}`.toLowerCase().includes(term))) return false;
       if (cat !== "todas" && i.categoria !== cat) return false;
       if (statusF !== "todos" && i.status !== statusF) return false;
+      if (genero !== "todos" && i.genero !== genero) return false;
       return true;
     });
-  }, [items, q, cat, statusF]);
+  }, [items, q, cat, statusF, genero]);
 
   const catCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -84,9 +86,15 @@ function Produtos() {
     return c;
   }, [items]);
 
+  const generoCounts = useMemo(() => {
+    const c: Record<string, number> = { masculino: 0, feminino: 0, unissex: 0 };
+    for (const i of items) c[i.genero] = (c[i.genero] ?? 0) + 1;
+    return c;
+  }, [items]);
+
   useEffect(() => {
     setPage(1);
-  }, [q, cat, statusF, view]);
+  }, [q, cat, statusF, genero, view]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -179,6 +187,29 @@ function Produtos() {
           </Button>
         </div>
       </header>
+
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-muted-foreground mr-1">Gênero:</span>
+        {([
+          ["todos", "Todos", items.length],
+          ["feminino", "Feminino", generoCounts.feminino],
+          ["masculino", "Masculino", generoCounts.masculino],
+          ["unissex", "Unissex", generoCounts.unissex],
+        ] as const).map(([val, label, count]) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => setGenero(val)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              genero === val
+                ? "bg-foreground text-background border-foreground"
+                : "bg-background hover:bg-accent"
+            }`}
+          >
+            {label} <span className="opacity-60">({count})</span>
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <button

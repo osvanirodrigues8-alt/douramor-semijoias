@@ -15,6 +15,7 @@ type NSProduct = {
   variants?: NSVariant[];
   images?: NSImage[];
   published?: boolean;
+  categories?: Array<{ id?: number | string; name?: string | { pt?: string; es?: string; en?: string } }>;
 };
 
 function pickLang(v: unknown): string | null {
@@ -36,6 +37,8 @@ type Categoria =
   | "anel" | "colar" | "brinco" | "pulseira" | "conjunto"
   | "relogio" | "oculos" | "bracelete" | "escapulario" | "tornozeleira" | "outro";
 
+type Genero = "masculino" | "feminino" | "unissex";
+
 function inferirCategoria(nome: string): Categoria {
   const n = nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (/^kit\b/.test(n) || /\bconjunto\b/.test(n)) return "conjunto";
@@ -50,6 +53,23 @@ function inferirCategoria(nome: string): Categoria {
   if (/^colar/.test(n) || /^gargantilha/.test(n) || /^corrente/.test(n) || /^choker/.test(n) || /^cordao/.test(n))
     return "colar";
   return "outro";
+}
+
+function inferirGenero(nome: string, categoriasNS: string[], categoria: Categoria): Genero {
+  const n = nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const cats = categoriasNS.map((c) => c.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  // Prioridade: categoria explícita da Nuvemshop
+  if (cats.some((c) => c.includes("masculin"))) return "masculino";
+  if (cats.some((c) => c.includes("feminin"))) return "feminino";
+  // Por nome
+  if (/(masculin|menino|cruz egipc|grumet|cadeado|piastrine|sao jorge|sao bento|padre pio|pingente jesus|pingente de jesus|cordao masc|kit masculin)/.test(n)) return "masculino";
+  if (/(feminin|menina)/.test(n)) return "feminino";
+  // Itens tipicamente masculinos por categoria
+  if (categoria === "escapulario" || categoria === "bracelete") return "masculino";
+  // Óculos como unissex
+  if (categoria === "oculos") return "unissex";
+  if (/\b(unissex|infantil)\b/.test(n)) return "unissex";
+  return "feminino";
 }
 
 export type SyncResult = {
@@ -125,6 +145,10 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const status: "inativo" | "esgotado" | "disponivel" =
         p.published === false ? "inativo" : quantidade_estoque <= 0 ? "esgotado" : "disponivel";
 
+      const categoria = inferirCategoria(nome);
+      const categoriasNS = (p.categories ?? []).map((c) => pickLang(c.name) ?? "").filter(Boolean);
+      const genero = inferirGenero(nome, categoriasNS, categoria);
+
       return {
         nuvemshop_product_id: String(p.id),
         nome,
@@ -133,7 +157,8 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         quantidade_estoque,
         url_foto,
         url_produto,
-        categoria: inferirCategoria(nome),
+        categoria,
+        genero,
         status,
         sincronizado_em: new Date().toISOString(),
       };

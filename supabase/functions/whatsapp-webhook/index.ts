@@ -73,6 +73,10 @@ Deno.serve(async (req) => {
 
     // Catálogo: busca produtos relevantes pela mensagem do usuário + amostra geral
     const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","tudo","obrigado","obrigada","oi","ola","olá"]);
+    const lowText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const generoFiltro: "masculino" | "feminino" | "unissex" | null =
+      /\b(masculin|homem|homens|menino|namorado|marido|esposo|pai|filho)\b/.test(lowText) ? "masculino" :
+      /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
     const keywords = (text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g) ?? [])
       .filter((w) => !stop.has(w))
       .slice(0, 6);
@@ -80,21 +84,25 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      const { data: matched } = await supabase
+      let qy = supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
+        .select("nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .or(orFilter)
         .limit(40);
+      if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
+      const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 40) {
-      const { data: extra } = await supabase
+      let qy = supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
+        .select("nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .order("atualizado_em", { ascending: false })
         .limit(40 - produtos.length);
+      if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
+      const { data: extra } = await qy;
       const seen = new Set(produtos.map((p) => p.nome));
       for (const p of extra ?? []) if (!seen.has(p.nome)) produtos.push(p);
     }

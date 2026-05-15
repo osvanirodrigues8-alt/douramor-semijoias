@@ -610,6 +610,7 @@ export type Database = {
           categoria: Database["public"]["Enums"]["produto_categoria"]
           criado_em: string
           descricao: string | null
+          genero: Database["public"]["Enums"]["produto_genero"]
           id: string
           nome: string
           nuvemshop_product_id: string | null
@@ -625,6 +626,7 @@ export type Database = {
           categoria?: Database["public"]["Enums"]["produto_categoria"]
           criado_em?: string
           descricao?: string | null
+          genero?: Database["public"]["Enums"]["produto_genero"]
           id?: string
           nome: string
           nuvemshop_product_id?: string | null
@@ -640,6 +642,7 @@ export type Database = {
           categoria?: Database["public"]["Enums"]["produto_categoria"]
           criado_em?: string
           descricao?: string | null
+          genero?: Database["public"]["Enums"]["produto_genero"]
           id?: string
           nome?: string
           nuvemshop_product_id?: string | null
@@ -782,6 +785,7 @@ export type Database = {
         | "bracelete"
         | "escapulario"
         | "tornozeleira"
+      produto_genero: "masculino" | "feminino" | "unissex"
       produto_status: "disponivel" | "esgotado" | "inativo"
     }
     CompositeTypes: {
@@ -947,6 +951,7 @@ export const Constants = {
         "escapulario",
         "tornozeleira",
       ],
+      produto_genero: ["masculino", "feminino", "unissex"],
       produto_status: ["disponivel", "esgotado", "inativo"],
     },
   },
