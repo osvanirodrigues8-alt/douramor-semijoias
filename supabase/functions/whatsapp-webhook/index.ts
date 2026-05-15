@@ -38,8 +38,36 @@ Deno.serve(async (req) => {
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
     const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
-    const text: string | undefined =
+    let text: string | undefined =
       message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
+
+    // === Mídia: áudio / imagem ===
+    const audioUrl: string | undefined =
+      message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
+    const imageUrl: string | undefined =
+      message?.imageMessage?.url ?? data?.imageMessage?.url ?? data?.image?.url ?? data?.mediaUrl?.image;
+    const legendaImg: string | undefined =
+      message?.imageMessage?.caption ?? data?.imageMessage?.caption ?? data?.caption;
+
+    let midiaTipo: "audio" | "image" | null = null;
+    let midiaUrl: string | null = null;
+    let midiaTranscricao: string | null = null;
+    let descricaoMidia: string | null = null;
+
+    const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+
+    if (!text && audioUrl) {
+      midiaTipo = "audio"; midiaUrl = audioUrl;
+      const tr = await transcreverAudio(audioUrl, LOVABLE_KEY);
+      if (tr) { text = tr; midiaTranscricao = tr; }
+    }
+    if (!text && imageUrl) {
+      midiaTipo = "image"; midiaUrl = imageUrl;
+      const desc = await descreverImagem(imageUrl, LOVABLE_KEY);
+      midiaTranscricao = desc;
+      descricaoMidia = desc;
+      text = legendaImg || `[imagem: ${desc ?? "joia"}]`;
+    }
 
     if (!remoteJid) {
       return new Response(JSON.stringify({ ok: true, ignored: "no jid" }), { headers: { ...cors, "Content-Type": "application/json" } });
