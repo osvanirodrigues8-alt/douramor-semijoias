@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet, redirect, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app")({
@@ -9,6 +11,7 @@ export const Route = createFileRoute("/_app")({
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/atendimento", label: "Atendimento", icon: AlertCircle, alertKey: "humano" as const },
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { to: "/agendamentos", label: "Agendamentos", icon: Calendar },
@@ -28,6 +31,24 @@ function AppLayout() {
   const { session, loading, signOut, user, role } = useAuth();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const [humanoCount, setHumanoCount] = useState(0);
+
+  useEffect(() => {
+    if (!session) return;
+    const refresh = async () => {
+      const { count } = await supabase
+        .from("conversas")
+        .select("id", { count: "exact", head: true })
+        .eq("precisa_humano", true);
+      setHumanoCount(count ?? 0);
+    };
+    refresh();
+    const ch = supabase
+      .channel("sidebar-humano")
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversas" }, () => refresh())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session]);
 
   if (loading) {
     return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Carregando…</div>;
@@ -47,7 +68,14 @@ function AppLayout() {
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           {nav.map((i) => (
-            <NavItem key={i.to} to={i.to} label={i.label} Icon={i.icon} active={path.startsWith(i.to)} />
+            <NavItem
+              key={i.to}
+              to={i.to}
+              label={i.label}
+              Icon={i.icon}
+              active={path.startsWith(i.to)}
+              badge={"alertKey" in i && i.alertKey === "humano" && humanoCount > 0 ? humanoCount : undefined}
+            />
           ))}
           <div className="py-3"><div className="h-px bg-border" /></div>
           {navAgent.map((i) => (
@@ -78,7 +106,7 @@ function AppLayout() {
   );
 }
 
-function NavItem({ to, label, Icon, active }: { to: string; label: string; Icon: any; active: boolean }) {
+function NavItem({ to, label, Icon, active, badge }: { to: string; label: string; Icon: any; active: boolean; badge?: number }) {
   return (
     <Link
       to={to}
@@ -87,7 +115,12 @@ function NavItem({ to, label, Icon, active }: { to: string; label: string; Icon:
       }`}
     >
       <Icon className="size-4 shrink-0" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold animate-pulse">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
