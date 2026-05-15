@@ -1,4 +1,4 @@
-// Webhook que recebe mensagens da Stevo (Evolution API) e responde via IA + envia de volta no WhatsApp.
+// Webhook Stevo → Juliana (IA humanizada). Detecta ativo/receptivo, busca produtos, escala humano, atualiza perfil.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   buildSystemPrompt,
@@ -6,6 +6,8 @@ import {
   detectarFaixaPreco,
   detectarPedidoHumano,
   detectarIntencaoCompra,
+  detectarTipoConversa,
+  detectarTemperatura,
 } from "../_shared/prompt.ts";
 
 const cors = {
@@ -15,14 +17,14 @@ const cors = {
 };
 
 const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
-const MSG_HUMANO = "Vou chamar nossa equipe para te ajudar pessoalmente! Um momento 🙏";
+const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar pessoalmente 🙏";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   try {
     const payload = await req.json().catch(() => ({}));
-    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 2000));
+    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 1500));
 
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
@@ -31,30 +33,47 @@ Deno.serve(async (req) => {
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
     const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
-
     const text: string | undefined =
-      message?.conversation ??
-      message?.extendedTextMessage?.text ??
-      message?.text ??
-      data?.text ??
-      payload?.message;
+      message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
 
-    if (fromMe || !remoteJid || !text) {
-      return new Response(JSON.stringify({ ok: true, ignored: true }), {
-        headers: { ...cors, "Content-Type": "application/json" },
-      });
+    if (!remoteJid) {
+      return new Response(JSON.stringify({ ok: true, ignored: "no jid" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     if (remoteJid.includes("@g.us") || info?.IsGroup === true) {
       return new Response(JSON.stringify({ ok: true, ignored: "group" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
-
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    const { data: cfg } = await supabase.from("configuracoes").select("*").limit(1).maybeSingle();
+    // ===== Mensagem enviada pelo HUMANO (fromMe) → registra como assistant para a Juliana ler depois =====
+    if (fromMe) {
+      if (!text) return new Response(JSON.stringify({ ok: true, ignored: "fromMe sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      const sessao_token = `wa:${remoteJid}`;
+      let { data: conv } = await supabase.from("conversas").select("id, cliente_id").eq("sessao_token", sessao_token).maybeSingle();
+      if (!conv) {
+        // tenta achar/criar cliente
+        const { data: existing } = await supabase.from("clientes").select("id").eq("contato", numero).maybeSingle();
+        const cliId = existing?.id ?? (await supabase.from("clientes").insert({ contato: numero, canal_origem: "whatsapp" }).select("id").single()).data?.id;
+        const { data: nova } = await supabase.from("conversas").insert({ sessao_token, canal: "whatsapp", cliente_id: cliId, tipo_conversa: "receptivo" }).select("id, cliente_id").single();
+        conv = nova!;
+      }
+      await supabase.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: text });
+      // Pausa IA: humano está atendendo
+      await supabase.from("conversas").update({ precisa_humano: false }).eq("id", conv.id);
+      return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    if (!text) {
+      return new Response(JSON.stringify({ ok: true, ignored: "sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
+      supabase.from("configuracoes").select("*").limit(1).maybeSingle(),
+      supabase.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
+    ]);
     if (!cfg) throw new Error("Configurações não encontradas");
 
-    // Cliente
+    // === Cliente ===
     let cliente: any = null;
     const { data: existing } = await supabase.from("clientes").select("*").eq("contato", numero).maybeSingle();
     if (existing) {
@@ -68,7 +87,7 @@ Deno.serve(async (req) => {
       cliente = novo;
     }
 
-    // Conversa
+    // === Conversa ===
     const sessao_token = `wa:${remoteJid}`;
     let { data: conversa } = await supabase.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle();
     if (!conversa) {
@@ -78,15 +97,27 @@ Deno.serve(async (req) => {
 
     await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text });
 
-    // ====== DETECÇÃO DE GATILHOS ANTES DA IA ======
-    const pedidoHumano = detectarPedidoHumano(text);
-    const intencaoCompra = detectarIntencaoCompra(text);
+    // Cliente respondeu → reset cadência follow-up + atualiza data_ultimo_contato
+    await supabase.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
+    await supabase.from("conversas").update({
+      fups_enviados_hoje: 0,
+      dia_followup_atual: 0,
+      proximo_followup_em: null,
+      data_inicio_followup: null,
+    }).eq("id", conversa.id);
 
+    // Se conversa estava pausada para humano, mantém pausada (humano resolve)
+    if (conversa.precisa_humano === true) {
+      console.log("[webhook] conversa pausada para humano — não responder");
+      return new Response(JSON.stringify({ ok: true, pausada_humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    // === Gatilho de humano por palavra ===
+    const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
+    const pedidoHumano = detectarPedidoHumano(text, palavrasExtras);
     if (pedidoHumano.sim) {
       await supabase.from("conversas").update({
-        precisa_humano: true,
-        motivo_humano: pedidoHumano.motivo,
-        humano_em: new Date().toISOString(),
+        precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString(),
       }).eq("id", conversa.id);
       await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
       await fetch(STEVO_URL, {
@@ -97,11 +128,12 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    const intencaoCompra = detectarIntencaoCompra(text);
     if (intencaoCompra) {
       await supabase.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
     }
 
-    // ====== BUSCA INTELIGENTE DE PRODUTOS ======
+    // === Busca inteligente de produtos ===
     const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","obrigado","obrigada","oi","ola","olá","reais","preco","preço"]);
     const lowText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const generoFiltro: "masculino" | "feminino" | "unissex" | null =
@@ -112,43 +144,24 @@ Deno.serve(async (req) => {
     const keywords = expandirComSinonimos(baseKeywords);
     const { max: precoMax, baratoPrimeiro } = detectarFaixaPreco(text);
 
-    // Calcular ranking de vendas (top vendidos)
-    const { data: pedidosRecentes } = await supabase
-      .from("pedidos")
-      .select("produtos_ids")
-      .order("criado_em", { ascending: false })
-      .limit(200);
+    const { data: pedidosRecentes } = await supabase.from("pedidos").select("produtos_ids").order("criado_em", { ascending: false }).limit(200);
     const contagemVendas = new Map<string, number>();
-    for (const p of pedidosRecentes ?? []) {
-      for (const id of (p.produtos_ids ?? []) as string[]) {
-        contagemVendas.set(id, (contagemVendas.get(id) ?? 0) + 1);
-      }
-    }
+    for (const p of pedidosRecentes ?? []) for (const id of (p.produtos_ids ?? []) as string[]) contagemVendas.set(id, (contagemVendas.get(id) ?? 0) + 1);
 
-    // Produtos já mostrados nesta conversa (para excluir)
+    const destaqueIds = new Set<string>((cfgAg?.produtos_destaque_ids ?? []) as string[]);
     const jaMostrados: string[] = Array.isArray(conversa.produtos_mostrados) ? conversa.produtos_mostrados : [];
 
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabase
-        .from("produtos")
-        .select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
-        .eq("status", "disponivel")
-        .or(orFilter)
-        .limit(60);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").or(orFilter).limit(60);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 30) {
-      let qy = supabase
-        .from("produtos")
-        .select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
-        .eq("status", "disponivel")
-        .order("atualizado_em", { ascending: false })
-        .limit(40);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: extra } = await qy;
@@ -156,38 +169,38 @@ Deno.serve(async (req) => {
       for (const p of extra ?? []) if (!seen.has(p.id)) produtos.push(p);
     }
 
-    // Ordenar: mais vendidos primeiro; depois (se cliente pediu barato) menor preço; senão alfabético
+    // Ordena: destaque > mais vendido > preço
     produtos.sort((a, b) => {
+      const da = destaqueIds.has(a.id) ? 1 : 0;
+      const db = destaqueIds.has(b.id) ? 1 : 0;
+      if (db !== da) return db - da;
       const va = contagemVendas.get(a.id) ?? 0;
       const vb = contagemVendas.get(b.id) ?? 0;
       if (vb !== va) return vb - va;
-      if (baratoPrimeiro) return Number(a.preco) - Number(b.preco);
-      return Number(a.preco) - Number(b.preco);
+      return baratoPrimeiro ? Number(a.preco) - Number(b.preco) : Number(a.preco) - Number(b.preco);
     });
 
-    // Marcar visualmente quais já foram mostrados (mantém no contexto da IA via "jaMostrados" no prompt)
-    const produtosParaPrompt = produtos.slice(0, 40);
+    const produtosParaPrompt = produtos.slice(0, 30);
 
-    const { data: cupons } = await supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true);
-    const { data: faqs } = await supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true });
-    const { data: hist } = await supabase.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
+    const [{ data: cupons }, { data: faqs }, { data: hist }] = await Promise.all([
+      supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
+      supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
+      supabase.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(50),
+    ]);
+
+    const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist ?? []);
+    if (!conversa.tipo_conversa || conversa.tipo_conversa !== tipoConv) {
+      await supabase.from("conversas").update({ tipo_conversa: tipoConv }).eq("id", conversa.id);
+    }
+    const temp = detectarTemperatura(hist ?? []);
 
     const systemPrompt = buildSystemPrompt({
-      cfg,
-      produtos: produtosParaPrompt,
-      cupons: cupons ?? [],
-      faqs: faqs ?? [],
-      canal: "whatsapp",
-      cliente,
-      produtosJaMostrados: jaMostrados,
+      cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
+      cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
     });
 
-    const extraNota = intencaoCompra
-      ? "\n\n# CONTEXTO ADICIONAL\nA cliente JÁ DEMONSTROU INTENÇÃO DE COMPRA. Foque em enviar link do produto + instruções: \"Acesse o link, adicione ao carrinho e finalize com cartão, PIX ou boleto. Entregamos para todo o Brasil com frete grátis! 🚚\""
-      : "";
-
     const messages = [
-      { role: "system", content: systemPrompt + extraNota },
+      { role: "system", content: systemPrompt },
       ...(hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo })),
     ];
 
@@ -203,53 +216,64 @@ Deno.serve(async (req) => {
       throw new Error(`AI ${aiResp.status}: ${txt.slice(0, 300)}`);
     }
     const ai = await aiResp.json();
-    const choice = ai.choices?.[0];
-    let reply: string = (choice?.message?.content ?? "").trim();
-    if (!reply) {
+    let reply: string = (ai.choices?.[0]?.message?.content ?? "").trim();
+    if (!reply) reply = MSG_HUMANO;
+
+    // === Detecta tag [ESCALAR] ===
+    let marcarHumano = false;
+    let motivoEscalar: string | null = null;
+    if (/\[ESCALAR\]/i.test(reply)) {
+      marcarHumano = true;
+      motivoEscalar = "Juliana decidiu escalar";
+      reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
+    }
+
+    // === Atualiza produtos_mostrados + cliente.produtos_vistos ===
+    const novosMostrados = new Set(jaMostrados);
+    const novosVistosIds = new Set<string>((cliente.produtos_vistos ?? []) as string[]);
+    const replyLower = reply.toLowerCase();
+    for (const p of produtos) {
+      const hit = (p.nome && replyLower.includes(String(p.nome).toLowerCase())) || (p.url_produto && reply.includes(p.url_produto));
+      if (hit) {
+        novosMostrados.add(p.nome);
+        novosVistosIds.add(p.id);
+      }
+    }
+    const adicionouAlgum = novosMostrados.size > jaMostrados.length;
+    const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? 2);
+    const novaTentativaSemResultado = adicionouAlgum ? 0 : (conversa.tentativas_sem_resultado ?? 0) + 1;
+    if (!adicionouAlgum && novaTentativaSemResultado >= tentativasMax) {
+      marcarHumano = true;
+      motivoEscalar = motivoEscalar ?? "Juliana não encontrou produto adequado";
       reply = MSG_HUMANO;
     }
 
-    // ====== ATUALIZAR PRODUTOS_MOSTRADOS E TENTATIVAS_SEM_RESULTADO ======
-    const novosMostrados = new Set(jaMostrados);
-    const replyLower = reply.toLowerCase();
-    for (const p of produtos) {
-      if (p.nome && replyLower.includes(String(p.nome).toLowerCase())) novosMostrados.add(p.nome);
-      if (p.url_produto && reply.includes(p.url_produto)) novosMostrados.add(p.nome);
-    }
-    const adicionouAlgum = novosMostrados.size > jaMostrados.length;
-    const novaTentativaSemResultado = adicionouAlgum ? 0 : (conversa.tentativas_sem_resultado ?? 0) + 1;
+    // Intenção de compra: adiciona produtos mencionados ao produtos_interesse
+    const novosInteresseIds = new Set<string>((cliente.produtos_interesse ?? []) as string[]);
+    if (intencaoCompra) for (const id of novosVistosIds) novosInteresseIds.add(id);
 
-    // Se 2 tentativas seguidas sem encontrar produto, força fallback humano
-    let replyFinal = reply;
-    let marcarHumano = false;
-    if (!adicionouAlgum && novaTentativaSemResultado >= 2 && /^[\s\S]{0,400}$/.test(reply)) {
-      replyFinal = MSG_HUMANO;
-      marcarHumano = true;
-    }
-    // Se a IA já entregou a mensagem de transferência, marca humano também
-    if (reply.includes("equipe para te ajudar pessoalmente")) marcarHumano = true;
-
-    await supabase.from("conversas").update({
-      produtos_mostrados: Array.from(novosMostrados),
-      tentativas_sem_resultado: novaTentativaSemResultado,
-      ...(marcarHumano ? {
-        precisa_humano: true,
-        motivo_humano: marcarHumano ? (pedidoHumano.motivo ?? "Dora sem opção adequada") : null,
-        humano_em: new Date().toISOString(),
-      } : {}),
-    }).eq("id", conversa.id);
-
-    await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: replyFinal });
+    await Promise.all([
+      supabase.from("conversas").update({
+        produtos_mostrados: Array.from(novosMostrados),
+        tentativas_sem_resultado: novaTentativaSemResultado,
+        ...(marcarHumano ? { precisa_humano: true, motivo_humano: motivoEscalar, humano_em: new Date().toISOString() } : {}),
+      }).eq("id", conversa.id),
+      supabase.from("clientes").update({
+        produtos_vistos: Array.from(novosVistosIds),
+        produtos_interesse: Array.from(novosInteresseIds),
+        temperatura_lead: temp,
+      }).eq("id", cliente.id),
+      supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }),
+    ]);
 
     const sendResp = await fetch(STEVO_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: Deno.env.get("STEVO_API_KEY") ?? "" },
-      body: JSON.stringify({ number: numero, text: replyFinal }),
+      body: JSON.stringify({ number: numero, text: reply }),
     });
-    const sendTxt = await sendResp.text();
-    console.log("[stevo-send]", sendResp.status, sendTxt.slice(0, 500));
+    console.log("[stevo-send]", sendResp.status);
 
-    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, humano: marcarHumano }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[stevo-webhook] error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
