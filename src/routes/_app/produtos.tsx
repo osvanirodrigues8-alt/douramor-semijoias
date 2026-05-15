@@ -293,7 +293,7 @@ function Produtos() {
                     </div>
                   </td>
                   <td className="p-3 font-medium">{p.nome}</td>
-                  <td className="p-3 capitalize">{p.categoria}</td>
+                  <td className="p-3">{CAT_LABEL[p.categoria] ?? p.categoria}</td>
                   <td className="p-3">R$ {Number(p.preco).toFixed(2)}</td>
                   <td className="p-3">{p.quantidade_estoque}</td>
                   <td className="p-3">
