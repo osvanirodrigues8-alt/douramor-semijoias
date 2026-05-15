@@ -1,0 +1,1 @@
+UPDATE public.configuracoes SET modelo_ia = 'openai/gpt-5-mini' WHERE modelo_ia = 'google/gemini-2.5-flash' OR modelo_ia IS NULL;
