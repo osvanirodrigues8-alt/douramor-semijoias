@@ -145,6 +145,10 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const status: "inativo" | "esgotado" | "disponivel" =
         p.published === false ? "inativo" : quantidade_estoque <= 0 ? "esgotado" : "disponivel";
 
+      const categoria = inferirCategoria(nome);
+      const categoriasNS = (p.categories ?? []).map((c) => pickLang(c.name) ?? "").filter(Boolean);
+      const genero = inferirGenero(nome, categoriasNS, categoria);
+
       return {
         nuvemshop_product_id: String(p.id),
         nome,
@@ -153,7 +157,8 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         quantidade_estoque,
         url_foto,
         url_produto,
-        categoria: inferirCategoria(nome),
+        categoria,
+        genero,
         status,
         sincronizado_em: new Date().toISOString(),
       };
