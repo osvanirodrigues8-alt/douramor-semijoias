@@ -15,6 +15,7 @@ type NSProduct = {
   variants?: NSVariant[];
   images?: NSImage[];
   published?: boolean;
+  categories?: Array<{ id?: number | string; name?: string | { pt?: string; es?: string; en?: string } }>;
 };
 
 function pickLang(v: unknown): string | null {
