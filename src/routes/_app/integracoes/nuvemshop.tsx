@@ -122,7 +122,28 @@ function NuvemshopIntegracao() {
             </Button>
           </div>
         </Card>
-      ) : (
+      )}
+
+      {conn && (
+        <Card className="p-6 space-y-4 mt-6">
+          <div>
+            <h2 className="font-medium">Sincronização de produtos</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Importa todos os produtos da Nuvemshop para o catálogo. A sincronização automática roda a cada 6 horas.
+            </p>
+          </div>
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <Loader2 className="size-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4 mr-2" />
+            )}
+            {syncing ? "Sincronizando..." : "Sincronizar agora"}
+          </Button>
+        </Card>
+      )}
+
+      {!conn && (
         <Card className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <XCircle className="size-5 text-muted-foreground mt-0.5" />
