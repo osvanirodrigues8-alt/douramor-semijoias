@@ -9,6 +9,9 @@ type NSProduct = {
   id: number | string;
   name?: string | { pt?: string; es?: string; en?: string };
   description?: string | { pt?: string; es?: string; en?: string };
+  handle?: string | { pt?: string; es?: string; en?: string };
+  permalink?: string;
+  canonical_url?: string;
   variants?: NSVariant[];
   images?: NSImage[];
   published?: boolean;
