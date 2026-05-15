@@ -43,7 +43,7 @@ export type SyncResult = {
 export async function syncNuvemshopProducts(): Promise<SyncResult> {
   const { data: conn, error: connErr } = await supabaseAdmin
     .from("nuvemshop_connections")
-    .select("store_id, access_token")
+    .select("store_id, access_token, dominio_loja")
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -52,6 +52,8 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
   if (!conn) {
     return { total: 0, criados: 0, atualizados: 0, erros: 0, mensagem: "Nenhuma loja Nuvemshop conectada." };
   }
+
+  const dominio = (conn.dominio_loja ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   const headers = {
     Authentication: `bearer ${conn.access_token}`,
