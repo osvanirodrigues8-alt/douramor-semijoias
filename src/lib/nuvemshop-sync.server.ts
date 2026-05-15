@@ -92,7 +92,7 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const url_foto = p.images?.[0]?.src ?? null;
       const nome = pickLang(p.name) ?? `Produto ${p.id}`;
       const descricao = stripHtml(pickLang(p.description));
-      const status = p.published === false ? "inativo" : undefined;
+      const status = p.published === false ? ("inativo" as const) : undefined;
 
       return {
         nuvemshop_product_id: String(p.id),
