@@ -30,6 +30,26 @@ type Connection = {
 function NuvemshopIntegracao() {
   const [conn, setConn] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const syncFn = useServerFn(syncProdutosNuvemshop);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const r = await syncFn();
+      if (r.mensagem) {
+        toast.warning(r.mensagem);
+      } else {
+        toast.success(
+          `${r.total} produtos sincronizados (${r.criados} novos, ${r.atualizados} atualizados${r.erros ? `, ${r.erros} erros` : ""})`
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
