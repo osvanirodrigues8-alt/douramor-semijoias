@@ -451,8 +451,8 @@ function ProdutoDialog({ open, onOpenChange, editing, onSaved }: any) {
                   </SelectTrigger>
                   <SelectContent>
                     {CATS.map((c) => (
-                      <SelectItem key={c} value={c} className="capitalize">
-                        {c}
+                      <SelectItem key={c} value={c}>
+                        {CAT_LABEL[c] ?? c}
                       </SelectItem>
                     ))}
                   </SelectContent>
