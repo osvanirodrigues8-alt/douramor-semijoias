@@ -205,8 +205,35 @@ ${(produtos ?? []).map((p) => `- ${p.nome} (${p.categoria}${p.genero ? `, ${p.ge
     blocos.push(`# CUPONS ATIVOS\n${cupons.map((c) => `- ${c.codigo}: ${c.tipo_desconto === "percentual" ? c.valor_desconto + "%" : "R$ " + c.valor_desconto}${c.validade ? ` (até ${c.validade})` : ""}`).join("\n")}`);
   }
 
+  // === CUPOM DE NEGOCIAÇÃO (último recurso) ===
+  const cupomCodigo = cfgAg?.cupom_negociacao_codigo ?? "JULIANA10";
+  const cupomPct = Number(cfgAg?.cupom_negociacao_percentual ?? 10);
+  const cupomAtivo = cfgAg?.cupom_negociacao_ativo !== false;
+  if (cupomAtivo) {
+    if (podeOferecerCupom) {
+      blocos.push(`# CUPOM DE NEGOCIAÇÃO (autorizado AGORA)
+A cliente já recebeu argumentos de valor (qualidade, frete, garantia) e AINDA está hesitando em fechar. Você está autorizada a oferecer UM cupom — agora é a hora.
+Use de forma natural, NUNCA como desespero. Exemplo:
+"Olha, como você já está aqui conversando comigo, deixa eu te dar um presente: usa o cupom *${cupomCodigo}* na hora de fechar e você ganha ${cupomPct}% de desconto 💛 É só inserir no carrinho!"
+Oferece apenas UMA vez nessa conversa. Não fique reforçando.`);
+    } else {
+      blocos.push(`# CUPOM DE NEGOCIAÇÃO (PROIBIDO oferecer agora)
+Existe um cupom secreto (${cupomCodigo}, ${cupomPct}%) que pode ser oferecido em casos raros — mas NÃO AGORA.
+Regras:
+- NUNCA mencione cupom, código ou desconto extra antes de ter tentado vender pelo valor (qualidade, garantia, frete grátis).
+- Se a cliente pedir desconto cedo: contorne com valor — não cite o cupom.
+- Se já foi oferecido nessa cliente antes, NÃO ofereça de novo.`);
+    }
+  }
+
   if (promptExtra) {
     blocos.push(`# INSTRUÇÕES EXTRAS DA LOJA\n${promptExtra}`);
+  }
+
+  if (descricaoMidia) {
+    blocos.push(`# MÍDIA RECEBIDA DA CLIENTE
+${descricaoMidia}
+Responda considerando o conteúdo da mídia naturalmente — não diga "vi a imagem que você mandou" como robô; trate como se tivesse acabado de ver.`);
   }
 
   blocos.push(`# DIRETRIZES FINAIS
