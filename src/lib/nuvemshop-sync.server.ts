@@ -32,6 +32,26 @@ function stripHtml(s: string | null): string | null {
   return s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || null;
 }
 
+type Categoria =
+  | "anel" | "colar" | "brinco" | "pulseira" | "conjunto"
+  | "relogio" | "oculos" | "bracelete" | "escapulario" | "tornozeleira" | "outro";
+
+function inferirCategoria(nome: string): Categoria {
+  const n = nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/^kit\b/.test(n) || /\bconjunto\b/.test(n)) return "conjunto";
+  if (/^relogio/.test(n) || /^relogios/.test(n)) return "relogio";
+  if (/^oculos/.test(n)) return "oculos";
+  if (/^bracelete/.test(n)) return "bracelete";
+  if (/^escapulario/.test(n) || /^escapularios/.test(n)) return "escapulario";
+  if (/^tornozeleira/.test(n)) return "tornozeleira";
+  if (/^brinco/.test(n)) return "brinco";
+  if (/^anel/.test(n) || /^aneis/.test(n)) return "anel";
+  if (/^pulseira/.test(n)) return "pulseira";
+  if (/^colar/.test(n) || /^gargantilha/.test(n) || /^corrente/.test(n) || /^choker/.test(n) || /^cordao/.test(n))
+    return "colar";
+  return "outro";
+}
+
 export type SyncResult = {
   total: number;
   criados: number;
