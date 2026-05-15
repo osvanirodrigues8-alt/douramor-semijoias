@@ -96,6 +96,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    // Áudio que falhou em transcrever
+    if (!text && midiaTipo === "audio") {
+      await fetch(STEVO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: Deno.env.get("STEVO_API_KEY") ?? "" },
+        body: JSON.stringify({ number: numero, text: MSG_AUDIO_FAIL }),
+      });
+      return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
     if (!text) {
       return new Response(JSON.stringify({ ok: true, ignored: "sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
