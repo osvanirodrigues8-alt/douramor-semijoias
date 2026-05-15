@@ -369,3 +369,88 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
     return true;
   }
 }
+
+// ============ Mídia (áudio / imagem) via Lovable AI Gateway ============
+
+const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+async function fetchAsBase64(url: string): Promise<{ data: string; mime: string }> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`mídia ${r.status}`);
+  const mime = r.headers.get("content-type") ?? "application/octet-stream";
+  const buf = new Uint8Array(await r.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return { data: btoa(bin), mime };
+}
+
+export async function transcreverAudio(url: string, apiKey: string): Promise<string | null> {
+  try {
+    const { data, mime } = await fetchAsBase64(url);
+    const r = await fetch(AI_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Transcreva exatamente o que foi falado neste áudio, em pt-BR. Apenas a transcrição, sem comentários." },
+            { type: "input_audio", input_audio: { data, format: mime.includes("ogg") ? "ogg" : mime.includes("mp3") ? "mp3" : "wav" } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) { console.error("transcricao err", r.status, await r.text()); return null; }
+    const j = await r.json();
+    return (j.choices?.[0]?.message?.content ?? "").trim() || null;
+  } catch (e) {
+    console.error("transcreverAudio fail", e);
+    return null;
+  }
+}
+
+export async function descreverImagem(url: string, apiKey: string): Promise<string | null> {
+  try {
+    const r = await fetch(AI_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Descreva esta imagem de joia/semijoia em pt-BR para uma vendedora identificar peças parecidas. Diga: TIPO (brinco/colar/anel/pulseira/etc), COR (dourado/prateado/rose), ESTILO (delicado/clássico/moderno/ousado), DETALHES (pedras, formato, tamanho). Máx 3 frases." },
+            { type: "image_url", image_url: { url } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) { console.error("desc img err", r.status, await r.text()); return null; }
+    const j = await r.json();
+    return (j.choices?.[0]?.message?.content ?? "").trim() || null;
+  } catch (e) {
+    console.error("descreverImagem fail", e);
+    return null;
+  }
+}
+
+// Extrai palavras-chave (tipo/cor/estilo) de uma descrição de imagem
+export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; categoria: string | null } {
+  const t = desc.toLowerCase();
+  const kw = new Set<string>();
+  const cats: Array<[RegExp, string]> = [
+    [/brinco|argola|ear/, "brinco"],
+    [/colar|corrente|gargantilha|cord[aã]o/, "colar"],
+    [/anel|alian[çc]a/, "anel"],
+    [/pulseira|bracelete/, "pulseira"],
+    [/conjunto|kit/, "conjunto"],
+    [/piercing/, "piercing"],
+  ];
+  let cat: string | null = null;
+  for (const [re, c] of cats) if (re.test(t)) { kw.add(c); cat = cat ?? c; }
+  for (const w of ["dourado", "prateado", "rose", "delicado", "moderno", "clássico", "classico", "pedra", "zircônia", "zirconia", "pérola", "perola"]) {
+    if (t.includes(w)) kw.add(w.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  }
+  return { keywords: Array.from(kw), categoria: cat };
+}
