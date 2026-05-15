@@ -65,15 +65,55 @@ async function processFollowUps() {
 
   for (const conv of elegiveis) {
     try {
-      const { data: hist } = await supabaseAdmin
-        .from("mensagens")
-        .select("papel, conteudo, criado_em")
-        .eq("conversa_id", conv.id)
-        .order("criado_em", { ascending: true })
-        .limit(30);
+      const [{ data: hist }, { data: cliente }, { data: pedidosAnteriores }] = await Promise.all([
+        supabaseAdmin
+          .from("mensagens")
+          .select("papel, conteudo, criado_em")
+          .eq("conversa_id", conv.id)
+          .order("criado_em", { ascending: true })
+          .limit(30),
+        conv.cliente_id
+          ? supabaseAdmin
+              .from("clientes")
+              .select("nome, preferencias, total_pedidos, canal_origem, criado_em")
+              .eq("id", conv.cliente_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null as any }),
+        conv.cliente_id
+          ? supabaseAdmin
+              .from("pedidos")
+              .select("numero, valor_total, status, produtos_snapshot, criado_em")
+              .eq("cliente_id", conv.cliente_id)
+              .order("criado_em", { ascending: false })
+              .limit(3)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
 
       const ultimaUser = [...(hist ?? [])].reverse().find((m) => m.papel === "user");
       const tentativaN = (conv.follow_up_count ?? 0) + 1;
+
+      // Detecta produtos "em foco": links que a Dora enviou que batem com produtos.url_produto
+      const textoAssistant = (hist ?? [])
+        .filter((m) => m.papel === "assistant")
+        .map((m) => m.conteudo)
+        .join("\n");
+      const linksMencionados = new Set(
+        (textoAssistant.match(/https?:\/\/[^\s)]+/g) ?? []).map((u) => u.replace(/[.,;)]+$/, "")),
+      );
+      const produtosEmFoco = (produtosTodos ?? [])
+        .filter((p) => p.url_produto && linksMencionados.has(p.url_produto))
+        .slice(0, 3);
+
+      // Fallback: se nenhum link bateu, tenta por nome citado
+      if (produtosEmFoco.length === 0 && textoAssistant) {
+        const lower = textoAssistant.toLowerCase();
+        for (const p of produtosTodos ?? []) {
+          if (p.nome && lower.includes(String(p.nome).toLowerCase())) {
+            produtosEmFoco.push(p);
+            if (produtosEmFoco.length >= 3) break;
+          }
+        }
+      }
 
       const systemPrompt = buildSystemPrompt({
         cfg,
@@ -83,17 +123,47 @@ async function processFollowUps() {
         canal: "whatsapp",
       });
 
-      const instrucao = `# TAREFA DE FOLLOW-UP
-Esta é a tentativa ${tentativaN} de retomar uma conversa parada há aproximadamente ${horas} horas no WhatsApp.
-A cliente não respondeu sua última mensagem. Escreva UMA mensagem curta (máx. 3 frases), no tom da loja, que:
-1. Retome o assunto exato da conversa (produto, dúvida, pedido — olhe o histórico).
-2. Cite com carinho o que ela estava vendo, se aplicável.
-3. Pergunte se ela ainda tem interesse / se quer continuar / oferece ajuda concreta.
-4. Se houver link de produto pertinente já mencionado, inclua novamente em uma linha separada.
+      const nome = (cliente?.nome ?? "").trim();
+      const primeiroNome = nome ? nome.split(/\s+/)[0] : "";
+      const totalPedidos = cliente?.total_pedidos ?? 0;
+      const recorrente = totalPedidos > 0;
 
-NÃO repita literalmente a frase: "${cfg.follow_up_mensagem}". Use-a só como referência de tom.
-NÃO se desculpe excessivamente. NÃO invente produtos.
-${ultimaUser ? `Última pergunta dela: "${ultimaUser.conteudo}"` : ""}`;
+      const fichaPedidos = (pedidosAnteriores ?? [])
+        .map((pe: any) => {
+          const itens = Array.isArray(pe.produtos_snapshot)
+            ? pe.produtos_snapshot.map((s: any) => s?.nome).filter(Boolean).slice(0, 3).join(", ")
+            : "";
+          const dias = Math.round((Date.now() - new Date(pe.criado_em).getTime()) / 86400000);
+          return `- Pedido #${pe.numero} — R$ ${pe.valor_total} — ${pe.status} — há ${dias} dias${itens ? ` — itens: ${itens}` : ""}`;
+        })
+        .join("\n");
+
+      const fichaProdutosFoco = produtosEmFoco
+        .map((p) => `- ${p.nome} — R$ ${p.preco}${p.url_produto ? ` — ${p.url_produto}` : ""}`)
+        .join("\n");
+
+      const instrucao = `# FICHA DA CLIENTE
+${primeiroNome ? `Nome: ${primeiroNome} (use no início da mensagem, naturalmente)` : "Nome: não informado — não invente"}
+Origem: ${cliente?.canal_origem ?? "whatsapp"}
+Pedidos anteriores: ${totalPedidos}${recorrente ? " (CLIENTE RECORRENTE — reconheça com carinho)" : " (ainda não comprou)"}
+${fichaPedidos ? `Histórico recente:\n${fichaPedidos}` : ""}
+${cliente?.preferencias ? `Preferências salvas: ${cliente.preferencias}` : ""}
+
+# PRODUTOS QUE ELA ESTAVA VENDO NESTA CONVERSA
+${fichaProdutosFoco || "(nenhum produto específico identificado — retome o assunto geral do histórico)"}
+
+# TAREFA DE FOLLOW-UP
+Tentativa ${tentativaN} de retomar uma conversa parada há ~${horas}h no WhatsApp.
+A cliente não respondeu sua última mensagem. Escreva UMA mensagem curta (2-3 frases), no tom da loja, que:
+1. ${primeiroNome ? `Comece chamando por "${primeiroNome}"` : "Comece de forma calorosa (sem nome)"}.
+2. Retome o ASSUNTO EXATO — cite o(s) produto(s) da ficha com carinho, se houver.
+3. ${recorrente ? "Reconheça que ela já é cliente (\"que bom te ver de novo\" ou similar)." : "Mostre disponibilidade para ajudar a escolher."}
+4. ${cliente?.preferencias ? `Alinhe à preferência dela: "${cliente.preferencias}".` : "Pergunte se ainda tem interesse ou se posso ajudar."}
+5. Se houver link de produto na ficha acima, REENVIE em uma linha separada no fim.
+
+NÃO repita literalmente: "${cfg.follow_up_mensagem}". Use só como referência de tom.
+NÃO se desculpe excessivamente. NÃO invente produtos, preços ou prazos.
+${ultimaUser ? `Última pergunta dela na conversa: "${ultimaUser.conteudo}"` : ""}`;
 
       const messages = [
         { role: "system", content: systemPrompt },
