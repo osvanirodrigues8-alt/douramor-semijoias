@@ -78,6 +78,12 @@ function Produtos() {
     });
   }, [items, q, cat, statusF]);
 
+  const catCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const i of items) c[i.categoria] = (c[i.categoria] ?? 0) + 1;
+    return c;
+  }, [items]);
+
   useEffect(() => {
     setPage(1);
   }, [q, cat, statusF, view]);
