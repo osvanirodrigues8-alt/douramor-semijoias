@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet, redirect, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app")({
@@ -9,6 +11,7 @@ export const Route = createFileRoute("/_app")({
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/atendimento", label: "Atendimento", icon: AlertCircle, alertKey: "humano" as const },
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { to: "/agendamentos", label: "Agendamentos", icon: Calendar },
