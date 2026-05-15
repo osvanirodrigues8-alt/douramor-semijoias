@@ -14,7 +14,32 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/produtos")({ component: Produtos });
 
-const CATS = ["anel", "colar", "brinco", "pulseira", "conjunto", "outro"];
+const CATS = [
+  "anel",
+  "colar",
+  "brinco",
+  "pulseira",
+  "bracelete",
+  "tornozeleira",
+  "escapulario",
+  "relogio",
+  "oculos",
+  "conjunto",
+  "outro",
+];
+const CAT_LABEL: Record<string, string> = {
+  anel: "Anéis",
+  colar: "Colares",
+  brinco: "Brincos",
+  pulseira: "Pulseiras",
+  bracelete: "Braceletes",
+  tornozeleira: "Tornozeleiras",
+  escapulario: "Escapulários",
+  relogio: "Relógios",
+  oculos: "Óculos",
+  conjunto: "Conjuntos / Kits",
+  outro: "Outros",
+};
 const PAGE_SIZE = 48;
 
 function Produtos() {
