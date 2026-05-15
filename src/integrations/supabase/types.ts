@@ -490,6 +490,39 @@ export type Database = {
           },
         ]
       }
+      nuvemshop_connections: {
+        Row: {
+          access_token: string
+          atualizado_em: string
+          criado_em: string
+          dominio_loja: string | null
+          id: string
+          nome_loja: string | null
+          scope: string | null
+          store_id: string
+        }
+        Insert: {
+          access_token: string
+          atualizado_em?: string
+          criado_em?: string
+          dominio_loja?: string | null
+          id?: string
+          nome_loja?: string | null
+          scope?: string | null
+          store_id: string
+        }
+        Update: {
+          access_token?: string
+          atualizado_em?: string
+          criado_em?: string
+          dominio_loja?: string | null
+          id?: string
+          nome_loja?: string | null
+          scope?: string | null
+          store_id?: string
+        }
+        Relationships: []
+      }
       pedidos: {
         Row: {
           atualizado_em: string
