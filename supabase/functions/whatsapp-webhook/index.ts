@@ -84,21 +84,25 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      const { data: matched } = await supabase
+      let qy = supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
+        .select("nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .or(orFilter)
         .limit(40);
+      if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
+      const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 40) {
-      const { data: extra } = await supabase
+      let qy = supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
+        .select("nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .order("atualizado_em", { ascending: false })
         .limit(40 - produtos.length);
+      if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
+      const { data: extra } = await qy;
       const seen = new Set(produtos.map((p) => p.nome));
       for (const p of extra ?? []) if (!seen.has(p.nome)) produtos.push(p);
     }
