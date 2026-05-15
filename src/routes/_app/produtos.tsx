@@ -75,9 +75,10 @@ function Produtos() {
       if (term && !(`${i.nome} ${i.descricao ?? ""}`.toLowerCase().includes(term))) return false;
       if (cat !== "todas" && i.categoria !== cat) return false;
       if (statusF !== "todos" && i.status !== statusF) return false;
+      if (genero !== "todos" && i.genero !== genero) return false;
       return true;
     });
-  }, [items, q, cat, statusF]);
+  }, [items, q, cat, statusF, genero]);
 
   const catCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -85,9 +86,15 @@ function Produtos() {
     return c;
   }, [items]);
 
+  const generoCounts = useMemo(() => {
+    const c: Record<string, number> = { masculino: 0, feminino: 0, unissex: 0 };
+    for (const i of items) c[i.genero] = (c[i.genero] ?? 0) + 1;
+    return c;
+  }, [items]);
+
   useEffect(() => {
     setPage(1);
-  }, [q, cat, statusF, view]);
+  }, [q, cat, statusF, genero, view]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
