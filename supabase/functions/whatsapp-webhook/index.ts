@@ -73,6 +73,10 @@ Deno.serve(async (req) => {
 
     // Catálogo: busca produtos relevantes pela mensagem do usuário + amostra geral
     const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","tudo","obrigado","obrigada","oi","ola","olá"]);
+    const lowText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const generoFiltro: "masculino" | "feminino" | "unissex" | null =
+      /\b(masculin|homem|homens|menino|namorado|marido|esposo|pai|filho)\b/.test(lowText) ? "masculino" :
+      /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
     const keywords = (text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g) ?? [])
       .filter((w) => !stop.has(w))
       .slice(0, 6);
