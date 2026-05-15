@@ -180,6 +180,34 @@ function Produtos() {
         </div>
       </header>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setCat("todas")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            cat === "todas"
+              ? "bg-foreground text-background border-foreground"
+              : "bg-background hover:bg-accent"
+          }`}
+        >
+          Todas <span className="opacity-60">({items.length})</span>
+        </button>
+        {CATS.filter((c) => (catCounts[c] ?? 0) > 0).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setCat(c)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              cat === c
+                ? "bg-foreground text-background border-foreground"
+                : "bg-background hover:bg-accent"
+            }`}
+          >
+            {CAT_LABEL[c] ?? c} <span className="opacity-60">({catCounts[c]})</span>
+          </button>
+        ))}
+      </div>
+
       <Card className="p-4 flex flex-wrap gap-3 items-center">
         <Input
           placeholder="Buscar produto…"
