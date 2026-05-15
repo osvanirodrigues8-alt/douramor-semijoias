@@ -31,6 +31,24 @@ function AppLayout() {
   const { session, loading, signOut, user, role } = useAuth();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const [humanoCount, setHumanoCount] = useState(0);
+
+  useEffect(() => {
+    if (!session) return;
+    const refresh = async () => {
+      const { count } = await supabase
+        .from("conversas")
+        .select("id", { count: "exact", head: true })
+        .eq("precisa_humano", true);
+      setHumanoCount(count ?? 0);
+    };
+    refresh();
+    const ch = supabase
+      .channel("sidebar-humano")
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversas" }, () => refresh())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [session]);
 
   if (loading) {
     return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Carregando…</div>;
@@ -50,7 +68,14 @@ function AppLayout() {
 
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           {nav.map((i) => (
-            <NavItem key={i.to} to={i.to} label={i.label} Icon={i.icon} active={path.startsWith(i.to)} />
+            <NavItem
+              key={i.to}
+              to={i.to}
+              label={i.label}
+              Icon={i.icon}
+              active={path.startsWith(i.to)}
+              badge={"alertKey" in i && i.alertKey === "humano" && humanoCount > 0 ? humanoCount : undefined}
+            />
           ))}
           <div className="py-3"><div className="h-px bg-border" /></div>
           {navAgent.map((i) => (
@@ -81,7 +106,7 @@ function AppLayout() {
   );
 }
 
-function NavItem({ to, label, Icon, active }: { to: string; label: string; Icon: any; active: boolean }) {
+function NavItem({ to, label, Icon, active, badge }: { to: string; label: string; Icon: any; active: boolean; badge?: number }) {
   return (
     <Link
       to={to}
@@ -90,7 +115,12 @@ function NavItem({ to, label, Icon, active }: { to: string; label: string; Icon:
       }`}
     >
       <Icon className="size-4 shrink-0" />
-      {label}
+      <span className="flex-1">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold animate-pulse">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
