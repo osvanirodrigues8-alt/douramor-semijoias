@@ -133,7 +133,7 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         quantidade_estoque,
         url_foto,
         url_produto,
-        categoria: "outro" as const,
+        categoria: inferirCategoria(nome),
         status,
         sincronizado_em: new Date().toISOString(),
       };
