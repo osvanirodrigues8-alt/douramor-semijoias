@@ -188,8 +188,8 @@ function Produtos() {
           <SelectContent>
             <SelectItem value="todas">Todas categorias</SelectItem>
             {CATS.map((c) => (
-              <SelectItem key={c} value={c} className="capitalize">
-                {c}
+              <SelectItem key={c} value={c}>
+                {CAT_LABEL[c] ?? c}
               </SelectItem>
             ))}
           </SelectContent>
