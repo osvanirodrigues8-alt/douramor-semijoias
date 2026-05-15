@@ -93,10 +93,15 @@ Deno.serve(async (req) => {
     if (!aiResp.ok) {
       const txt = await aiResp.text();
       console.error("AI error", aiResp.status, txt);
-      throw new Error(`AI ${aiResp.status}`);
+      throw new Error(`AI ${aiResp.status}: ${txt.slice(0, 300)}`);
     }
     const ai = await aiResp.json();
-    const reply: string = ai.choices?.[0]?.message?.content ?? "Desculpe, não consegui responder agora.";
+    const choice = ai.choices?.[0];
+    let reply: string = (choice?.message?.content ?? "").trim();
+    if (!reply) {
+      console.error("[stevo-webhook] AI empty reply", JSON.stringify({ finish: choice?.finish_reason, usage: ai.usage, raw: ai }).slice(0, 2000));
+      reply = "Desculpe, tive um problema técnico agora. Pode repetir, por favor? 💛";
+    }
 
     await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
 
