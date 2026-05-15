@@ -22,6 +22,7 @@ import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppAvaliacoesRouteImport } from './routes/_app/avaliacoes'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
+import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
 import { Route as ApiPublicHooksSyncNuvemshopProductsRouteImport } from './routes/api/public/hooks/sync-nuvemshop-products'
@@ -90,6 +91,11 @@ const AppAgendamentosRoute = AppAgendamentosRouteImport.update({
   path: '/agendamentos',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicFollowUpCronRoute = ApiPublicFollowUpCronRouteImport.update({
+  id: '/api/public/follow-up-cron',
+  path: '/api/public/follow-up-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppIntegracoesNuvemshopRoute = AppIntegracoesNuvemshopRouteImport.update({
   id: '/integracoes/nuvemshop',
   path: '/integracoes/nuvemshop',
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -139,6 +146,7 @@ export interface FileRoutesByTo {
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/integracoes/nuvemshop'
+    | '/api/public/follow-up-cron'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/integracoes/nuvemshop'
+    | '/api/public/follow-up-cron'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   id:
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/_app/produtos'
     | '/_app/relatorios'
     | '/_app/integracoes/nuvemshop'
+    | '/api/public/follow-up-cron'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesById: FileRoutesById
@@ -220,6 +232,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicFollowUpCronRoute: typeof ApiPublicFollowUpCronRoute
   ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -317,6 +330,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgendamentosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/follow-up-cron': {
+      id: '/api/public/follow-up-cron'
+      path: '/api/public/follow-up-cron'
+      fullPath: '/api/public/follow-up-cron'
+      preLoaderRoute: typeof ApiPublicFollowUpCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/integracoes/nuvemshop': {
       id: '/_app/integracoes/nuvemshop'
       path: '/integracoes/nuvemshop'
@@ -375,6 +395,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicFollowUpCronRoute: ApiPublicFollowUpCronRoute,
   ApiPublicHooksSyncNuvemshopProductsRoute:
     ApiPublicHooksSyncNuvemshopProductsRoute,
   ApiPublicNuvemshopCallbackRoute: ApiPublicNuvemshopCallbackRoute,

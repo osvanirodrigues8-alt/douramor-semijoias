@@ -146,7 +146,10 @@ export type Database = {
           enviar_foto_catalogo: boolean
           follow_up_ativo: boolean
           follow_up_horas: number
+          follow_up_intervalo_horas: number
+          follow_up_max_tentativas: number
           follow_up_mensagem: string
+          follow_up_respeitar_horario: boolean
           formas_pagamento_ativas: string[]
           horario_atendimento_fim: string
           horario_atendimento_inicio: string
@@ -188,7 +191,10 @@ export type Database = {
           enviar_foto_catalogo?: boolean
           follow_up_ativo?: boolean
           follow_up_horas?: number
+          follow_up_intervalo_horas?: number
+          follow_up_max_tentativas?: number
           follow_up_mensagem?: string
+          follow_up_respeitar_horario?: boolean
           formas_pagamento_ativas?: string[]
           horario_atendimento_fim?: string
           horario_atendimento_inicio?: string
@@ -230,7 +236,10 @@ export type Database = {
           enviar_foto_catalogo?: boolean
           follow_up_ativo?: boolean
           follow_up_horas?: number
+          follow_up_intervalo_horas?: number
+          follow_up_max_tentativas?: number
           follow_up_mensagem?: string
+          follow_up_respeitar_horario?: boolean
           formas_pagamento_ativas?: string[]
           horario_atendimento_fim?: string
           horario_atendimento_inicio?: string
@@ -272,8 +281,12 @@ export type Database = {
           cliente_id: string | null
           contexto: Json | null
           criado_em: string
+          follow_up_count: number
+          follow_up_enviado_em: string | null
           id: string
           sessao_token: string
+          ultima_mensagem_em: string
+          ultima_mensagem_papel: string | null
         }
         Insert: {
           atualizado_em?: string
@@ -281,8 +294,12 @@ export type Database = {
           cliente_id?: string | null
           contexto?: Json | null
           criado_em?: string
+          follow_up_count?: number
+          follow_up_enviado_em?: string | null
           id?: string
           sessao_token: string
+          ultima_mensagem_em?: string
+          ultima_mensagem_papel?: string | null
         }
         Update: {
           atualizado_em?: string
@@ -290,8 +307,12 @@ export type Database = {
           cliente_id?: string | null
           contexto?: Json | null
           criado_em?: string
+          follow_up_count?: number
+          follow_up_enviado_em?: string | null
           id?: string
           sessao_token?: string
+          ultima_mensagem_em?: string
+          ultima_mensagem_papel?: string | null
         }
         Relationships: [
           {
