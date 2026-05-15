@@ -103,34 +103,67 @@ export type Database = {
       clientes: {
         Row: {
           atualizado_em: string
+          budget_aproximado: number | null
           canal_origem: Database["public"]["Enums"]["canal"]
+          categoria_favorita: string | null
           contato: string
           criado_em: string
+          data_aniversario: string | null
+          data_ultimo_contato: string | null
+          estilo_preferido: string | null
+          genero_interesse: string | null
           id: string
+          motivo_nao_fechamento: string | null
           nome: string | null
           preferencias: string | null
+          produtos_comprados: string[]
+          produtos_interesse: string[]
+          produtos_vistos: string[]
+          temperatura_lead: string
           total_pedidos: number
           ultimo_pedido_id: string | null
         }
         Insert: {
           atualizado_em?: string
+          budget_aproximado?: number | null
           canal_origem: Database["public"]["Enums"]["canal"]
+          categoria_favorita?: string | null
           contato: string
           criado_em?: string
+          data_aniversario?: string | null
+          data_ultimo_contato?: string | null
+          estilo_preferido?: string | null
+          genero_interesse?: string | null
           id?: string
+          motivo_nao_fechamento?: string | null
           nome?: string | null
           preferencias?: string | null
+          produtos_comprados?: string[]
+          produtos_interesse?: string[]
+          produtos_vistos?: string[]
+          temperatura_lead?: string
           total_pedidos?: number
           ultimo_pedido_id?: string | null
         }
         Update: {
           atualizado_em?: string
+          budget_aproximado?: number | null
           canal_origem?: Database["public"]["Enums"]["canal"]
+          categoria_favorita?: string | null
           contato?: string
           criado_em?: string
+          data_aniversario?: string | null
+          data_ultimo_contato?: string | null
+          estilo_preferido?: string | null
+          genero_interesse?: string | null
           id?: string
+          motivo_nao_fechamento?: string | null
           nome?: string | null
           preferencias?: string | null
+          produtos_comprados?: string[]
+          produtos_interesse?: string[]
+          produtos_vistos?: string[]
+          temperatura_lead?: string
           total_pedidos?: number
           ultimo_pedido_id?: string | null
         }
@@ -274,6 +307,117 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracoes_agente: {
+        Row: {
+          assinatura: string | null
+          atualizado_em: string
+          auto_aniversario_ativa: boolean
+          auto_avaliacao_ativa: boolean
+          auto_datas_comerciais_ativa: boolean
+          auto_reativacao_ativa: boolean
+          contexto_loja: string | null
+          criado_em: string
+          dias_avaliacao: number
+          dias_reativacao: number
+          dias_total: number
+          estoque_baixo_threshold: number
+          followup_ativo: boolean
+          frase_abertura: string | null
+          fup1_horas: number
+          fup2_horas: number
+          fup3_horas: number
+          horario_fim: string
+          horario_inicio: string
+          id: string
+          max_fups_dia: number
+          max_produtos_apresentacao: number
+          nome_agente: string
+          palavras_chave_humano: string[]
+          produtos_destaque_ids: string[]
+          promocao_ativa_texto: string | null
+          promocao_ativa_validade: string | null
+          prompt_extra: string | null
+          respeitar_horario: boolean
+          responsavel_nome: string | null
+          responsavel_numero: string | null
+          tentativas_antes_escalar: number
+          tom: string
+          uso_emoji: string
+        }
+        Insert: {
+          assinatura?: string | null
+          atualizado_em?: string
+          auto_aniversario_ativa?: boolean
+          auto_avaliacao_ativa?: boolean
+          auto_datas_comerciais_ativa?: boolean
+          auto_reativacao_ativa?: boolean
+          contexto_loja?: string | null
+          criado_em?: string
+          dias_avaliacao?: number
+          dias_reativacao?: number
+          dias_total?: number
+          estoque_baixo_threshold?: number
+          followup_ativo?: boolean
+          frase_abertura?: string | null
+          fup1_horas?: number
+          fup2_horas?: number
+          fup3_horas?: number
+          horario_fim?: string
+          horario_inicio?: string
+          id?: string
+          max_fups_dia?: number
+          max_produtos_apresentacao?: number
+          nome_agente?: string
+          palavras_chave_humano?: string[]
+          produtos_destaque_ids?: string[]
+          promocao_ativa_texto?: string | null
+          promocao_ativa_validade?: string | null
+          prompt_extra?: string | null
+          respeitar_horario?: boolean
+          responsavel_nome?: string | null
+          responsavel_numero?: string | null
+          tentativas_antes_escalar?: number
+          tom?: string
+          uso_emoji?: string
+        }
+        Update: {
+          assinatura?: string | null
+          atualizado_em?: string
+          auto_aniversario_ativa?: boolean
+          auto_avaliacao_ativa?: boolean
+          auto_datas_comerciais_ativa?: boolean
+          auto_reativacao_ativa?: boolean
+          contexto_loja?: string | null
+          criado_em?: string
+          dias_avaliacao?: number
+          dias_reativacao?: number
+          dias_total?: number
+          estoque_baixo_threshold?: number
+          followup_ativo?: boolean
+          frase_abertura?: string | null
+          fup1_horas?: number
+          fup2_horas?: number
+          fup3_horas?: number
+          horario_fim?: string
+          horario_inicio?: string
+          id?: string
+          max_fups_dia?: number
+          max_produtos_apresentacao?: number
+          nome_agente?: string
+          palavras_chave_humano?: string[]
+          produtos_destaque_ids?: string[]
+          promocao_ativa_texto?: string | null
+          promocao_ativa_validade?: string | null
+          prompt_extra?: string | null
+          respeitar_horario?: boolean
+          responsavel_nome?: string | null
+          responsavel_numero?: string | null
+          tentativas_antes_escalar?: number
+          tom?: string
+          uso_emoji?: string
+        }
+        Relationships: []
+      }
       conversas: {
         Row: {
           atualizado_em: string
@@ -281,16 +425,21 @@ export type Database = {
           cliente_id: string | null
           contexto: Json | null
           criado_em: string
+          data_inicio_followup: string | null
+          dia_followup_atual: number
           follow_up_count: number
           follow_up_enviado_em: string | null
+          fups_enviados_hoje: number
           humano_em: string | null
           id: string
           intencao_compra_em: string | null
           motivo_humano: string | null
           precisa_humano: boolean
           produtos_mostrados: Json
+          proximo_followup_em: string | null
           sessao_token: string
           tentativas_sem_resultado: number
+          tipo_conversa: string
           ultima_mensagem_em: string
           ultima_mensagem_papel: string | null
         }
@@ -300,16 +449,21 @@ export type Database = {
           cliente_id?: string | null
           contexto?: Json | null
           criado_em?: string
+          data_inicio_followup?: string | null
+          dia_followup_atual?: number
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          fups_enviados_hoje?: number
           humano_em?: string | null
           id?: string
           intencao_compra_em?: string | null
           motivo_humano?: string | null
           precisa_humano?: boolean
           produtos_mostrados?: Json
+          proximo_followup_em?: string | null
           sessao_token: string
           tentativas_sem_resultado?: number
+          tipo_conversa?: string
           ultima_mensagem_em?: string
           ultima_mensagem_papel?: string | null
         }
@@ -319,16 +473,21 @@ export type Database = {
           cliente_id?: string | null
           contexto?: Json | null
           criado_em?: string
+          data_inicio_followup?: string | null
+          dia_followup_atual?: number
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          fups_enviados_hoje?: number
           humano_em?: string | null
           id?: string
           intencao_compra_em?: string | null
           motivo_humano?: string | null
           precisa_humano?: boolean
           produtos_mostrados?: Json
+          proximo_followup_em?: string | null
           sessao_token?: string
           tentativas_sem_resultado?: number
+          tipo_conversa?: string
           ultima_mensagem_em?: string
           ultima_mensagem_papel?: string | null
         }
