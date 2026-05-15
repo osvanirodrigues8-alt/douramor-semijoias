@@ -86,9 +86,9 @@ function NuvemshopIntegracao() {
         </p>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Carregando…</p>
-      ) : conn ? (
+      {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+
+      {!loading && conn && (
         <Card className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="size-5 text-green-600 mt-0.5" />
