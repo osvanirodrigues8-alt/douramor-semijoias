@@ -1,90 +1,28 @@
+## Problema
 
-## Objetivo
-
-Importar todos os produtos da loja Nuvemshop conectada para a tabela `produtos`, mantendo-os sincronizados via:
-- Botão **"Sincronizar agora"** na página `/integracoes/nuvemshop`
-- **Cron a cada 6h** (pg_cron + pg_net)
-
-## 1. Migração de banco
-
-Adicionar à tabela `produtos`:
-- `nuvemshop_product_id text unique` — chave para `upsert` (evita duplicar a cada sync)
-- `sincronizado_em timestamptz` — última vez que veio da Nuvemshop
-- Índice em `nuvemshop_product_id`
-
-Nada é removido. Produtos cadastrados manualmente (sem `nuvemshop_product_id`) continuam intactos.
-
-## 2. Função de sincronização (compartilhada)
-
-Criar `src/lib/nuvemshop-sync.server.ts` com `syncNuvemshopProducts()` que:
-1. Lê `nuvemshop_connections` (mais recente) via `supabaseAdmin`
-2. Pagina `GET https://api.tiendanube.com/v1/{store_id}/products?per_page=200&page=N` até esgotar
-   - Header: `Authentication: bearer {access_token}`, `User-Agent: Douramor Agente IA`
-3. Para cada produto, mapeia:
-   - `nome` ← `name.pt | name.es | name`
-   - `descricao` ← `description.pt` (strip HTML simples)
-   - `preco` ← `variants[0].price` (numérico)
-   - `quantidade_estoque` ← soma de `variants[].stock` (null = ilimitado → 9999)
-   - `url_foto` ← `images[0].src`
-   - `categoria` ← `'outro'` (enum atual não mapeia 1:1; mantém produtos categorizáveis manualmente)
-   - `status` ← `'inativo'` se Nuvemshop `published=false`, senão deixa o trigger `sync_produto_status` decidir
-4. `upsert` em lotes por `nuvemshop_product_id`
-5. Retorna `{ total, criados, atualizados, erros }`
-
-## 3. Server function (botão manual)
-
-`src/lib/nuvemshop.functions.ts`:
-```ts
-export const syncProdutosNuvemshop = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .handler(async () => syncNuvemshopProducts());
+Os 919 erros vieram todos com:
+```
+code: 42P10
+message: there is no unique or exclusion constraint matching the ON CONFLICT specification
 ```
 
-Apenas staff/admin (RLS já cobre — middleware garante usuário autenticado, e a leitura/escrita usa `supabaseAdmin`).
+Causa: a migração criou um **índice único parcial** (`WHERE nuvemshop_product_id IS NOT NULL`). PostgREST/`upsert(..., onConflict: 'nuvemshop_product_id')` exige uma **UNIQUE constraint real** (ou índice único *não* parcial). Índices parciais não satisfazem `ON CONFLICT`.
 
-## 4. Rota pública para cron
+## Correção
 
-`src/routes/api/public/hooks/sync-nuvemshop-products.ts` (POST):
-- Valida header `apikey` = `SUPABASE_PUBLISHABLE_KEY`
-- Chama `syncNuvemshopProducts()`
-- Retorna JSON com contadores
+Migração curta:
 
-## 5. UI — Botão "Sincronizar agora"
+1. `DROP INDEX IF EXISTS public.produtos_nuvemshop_product_id_key;`
+2. `ALTER TABLE public.produtos ADD CONSTRAINT produtos_nuvemshop_product_id_key UNIQUE (nuvemshop_product_id);`
 
-Em `src/routes/_app/integracoes/nuvemshop.tsx` (apenas quando há conexão):
-- Card novo "Sincronização de produtos"
-- Botão **Sincronizar agora** com loading spinner
-- Mostra resultado da última sync via toast: `"42 produtos sincronizados (3 novos, 39 atualizados)"`
-- Texto: *"Sincronização automática roda a cada 6 horas."*
+Postgres trata múltiplos `NULL` como distintos em UNIQUE por padrão, então produtos cadastrados manualmente (sem `nuvemshop_product_id`) continuam coexistindo sem conflito.
 
-## 6. Cron job (pg_cron)
+Nada precisa mudar no código TypeScript — o `upsert` em `nuvemshop-sync.server.ts` já usa `onConflict: "nuvemshop_product_id"`.
 
-```sql
-select cron.schedule(
-  'sync-nuvemshop-products',
-  '0 */6 * * *',
-  $$ select net.http_post(
-    url := 'https://douramor-semijoias.lovable.app/api/public/hooks/sync-nuvemshop-products',
-    headers := '{"Content-Type":"application/json","apikey":"<ANON_KEY>"}'::jsonb,
-    body := '{}'::jsonb
-  ); $$
-);
-```
+## Depois da migração
 
-Inserido via tool `supabase--insert` (não migration, contém URL/chave do projeto).
+Você clica **Sincronizar agora** de novo e os 919 produtos entram (criados na primeira vez, atualizados nas próximas).
 
-## Arquivos criados/editados
+## Arquivos
 
-- **migration**: alter `produtos` (+ 2 colunas + índice)
-- **novo** `src/lib/nuvemshop-sync.server.ts` — lógica compartilhada
-- **novo** `src/lib/nuvemshop.functions.ts` — serverFn
-- **novo** `src/routes/api/public/hooks/sync-nuvemshop-products.ts` — endpoint cron
-- **edit** `src/routes/_app/integracoes/nuvemshop.tsx` — card + botão
-- **insert** SQL `cron.schedule(...)`
-
-## Fora do escopo (próximas iterações)
-
-- Sincronização de pedidos / clientes
-- Webhooks Nuvemshop (`product/updated`, `product/deleted`) para tempo real
-- Mapeamento de categorias Nuvemshop → enum `produto_categoria`
-- Imagens adicionais (hoje só a primeira)
+- **nova migração** — drop do índice parcial + add UNIQUE constraint
