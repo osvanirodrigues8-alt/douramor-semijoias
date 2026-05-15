@@ -97,6 +97,11 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const url_foto = p.images?.[0]?.src ?? null;
       const nome = pickLang(p.name) ?? `Produto ${p.id}`;
       const descricao = stripHtml(pickLang(p.description));
+      const handle = pickLang(p.handle);
+      const url_produto =
+        p.permalink ??
+        p.canonical_url ??
+        (handle && dominio ? `https://${dominio}/produtos/${handle}` : null);
       const status: "inativo" | "esgotado" | "disponivel" =
         p.published === false ? "inativo" : quantidade_estoque <= 0 ? "esgotado" : "disponivel";
 
@@ -107,6 +112,7 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         preco,
         quantidade_estoque,
         url_foto,
+        url_produto,
         categoria: "outro" as const,
         status,
         sincronizado_em: new Date().toISOString(),
