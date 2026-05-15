@@ -50,6 +50,7 @@ function Produtos() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("todas");
   const [statusF, setStatusF] = useState<string>("todos");
+  const [genero, setGenero] = useState<string>("todos");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
   const fileRef = useRef<HTMLInputElement>(null);
