@@ -73,7 +73,7 @@ async function processFollowUps() {
         cupons: cupons ?? [], faqs: faqs ?? [],
         canal: "whatsapp",
         cliente,
-        produtosJaMostrados: Array.isArray(conv.produtos_mostrados) ? conv.produtos_mostrados : [],
+        produtosJaMostrados: (Array.isArray(conv.produtos_mostrados) ? conv.produtos_mostrados : []).map((x: any) => String(x)).filter(Boolean),
         tipoConversa: (conv.tipo_conversa as any) ?? "ativo",
         temperatura: temp,
         modoFollowup: numeroTentativa,
