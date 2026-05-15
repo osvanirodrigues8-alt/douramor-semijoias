@@ -22,6 +22,7 @@ import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppAvaliacoesRouteImport } from './routes/_app/avaliacoes'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
+import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
 
 const LoginRoute = LoginRouteImport.update({
@@ -88,6 +89,11 @@ const AppAgendamentosRoute = AppAgendamentosRouteImport.update({
   path: '/agendamentos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppIntegracoesNuvemshopRoute = AppIntegracoesNuvemshopRouteImport.update({
+  id: '/integracoes/nuvemshop',
+  path: '/integracoes/nuvemshop',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiPublicNuvemshopCallbackRoute =
   ApiPublicNuvemshopCallbackRouteImport.update({
     id: '/api/public/nuvemshop/callback',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRoutesById {
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
+  '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRouteTypes {
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
+    | '/integracoes/nuvemshop'
     | '/api/public/nuvemshop/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
+    | '/integracoes/nuvemshop'
     | '/api/public/nuvemshop/callback'
   id:
     | '__root__'
@@ -188,6 +199,7 @@ export interface FileRouteTypes {
     | '/_app/pedidos'
     | '/_app/produtos'
     | '/_app/relatorios'
+    | '/_app/integracoes/nuvemshop'
     | '/api/public/nuvemshop/callback'
   fileRoutesById: FileRoutesById
 }
@@ -291,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgendamentosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/integracoes/nuvemshop': {
+      id: '/_app/integracoes/nuvemshop'
+      path: '/integracoes/nuvemshop'
+      fullPath: '/integracoes/nuvemshop'
+      preLoaderRoute: typeof AppIntegracoesNuvemshopRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/public/nuvemshop/callback': {
       id: '/api/public/nuvemshop/callback'
       path: '/api/public/nuvemshop/callback'
@@ -312,6 +331,7 @@ interface AppRouteChildren {
   AppPedidosRoute: typeof AppPedidosRoute
   AppProdutosRoute: typeof AppProdutosRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
+  AppIntegracoesNuvemshopRoute: typeof AppIntegracoesNuvemshopRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -325,6 +345,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPedidosRoute: AppPedidosRoute,
   AppProdutosRoute: AppProdutosRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
+  AppIntegracoesNuvemshopRoute: AppIntegracoesNuvemshopRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
