@@ -71,8 +71,33 @@ Deno.serve(async (req) => {
 
     await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text });
 
-    // Catálogo + cupons + faqs
-    const { data: produtos } = await supabase.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40);
+    // Catálogo: busca produtos relevantes pela mensagem do usuário + amostra geral
+    const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","tudo","obrigado","obrigada","oi","ola","olá"]);
+    const keywords = (text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g) ?? [])
+      .filter((w) => !stop.has(w))
+      .slice(0, 6);
+
+    let produtos: any[] = [];
+    if (keywords.length) {
+      const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
+      const { data: matched } = await supabase
+        .from("produtos")
+        .select("nome,categoria,preco,descricao,quantidade_estoque,status")
+        .eq("status", "disponivel")
+        .or(orFilter)
+        .limit(40);
+      produtos = matched ?? [];
+    }
+    if (produtos.length < 40) {
+      const { data: extra } = await supabase
+        .from("produtos")
+        .select("nome,categoria,preco,descricao,quantidade_estoque,status")
+        .eq("status", "disponivel")
+        .order("atualizado_em", { ascending: false })
+        .limit(40 - produtos.length);
+      const seen = new Set(produtos.map((p) => p.nome));
+      for (const p of extra ?? []) if (!seen.has(p.nome)) produtos.push(p);
+    }
     const { data: cupons } = await supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true);
     const { data: faqs } = await supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true });
     const { data: hist } = await supabase.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
