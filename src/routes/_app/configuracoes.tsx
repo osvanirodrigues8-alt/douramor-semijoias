@@ -137,9 +137,12 @@ function Configuracoes() {
             <Field label="WhatsApp humano (transferência)"><Input value={cfg.whatsapp_humano ?? ""} placeholder="+55 11..." onChange={(e) => set("whatsapp_humano", e.target.value)} /></Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Follow-up ativo"><Switch checked={cfg.follow_up_ativo} onCheckedChange={(v) => set("follow_up_ativo", v)} /></Field>
-              <Field label="Disparar após (horas)"><Input type="number" value={cfg.follow_up_horas} onChange={(e) => set("follow_up_horas", Number(e.target.value))} /></Field>
+              <Field label="Disparar após (horas sem resposta)"><Input type="number" value={cfg.follow_up_horas} onChange={(e) => set("follow_up_horas", Number(e.target.value))} /></Field>
+              <Field label="Máx. tentativas de follow-up"><Input type="number" min={1} value={cfg.follow_up_max_tentativas ?? 1} onChange={(e) => set("follow_up_max_tentativas", Number(e.target.value))} /></Field>
+              <Field label="Intervalo entre tentativas (horas)"><Input type="number" min={1} value={cfg.follow_up_intervalo_horas ?? 24} onChange={(e) => set("follow_up_intervalo_horas", Number(e.target.value))} /></Field>
+              <Field label="Respeitar horário de atendimento"><Switch checked={cfg.follow_up_respeitar_horario ?? true} onCheckedChange={(v) => set("follow_up_respeitar_horario", v)} /></Field>
             </div>
-            <Field label="Mensagem de follow-up"><Textarea rows={3} value={cfg.follow_up_mensagem ?? ""} onChange={(e) => set("follow_up_mensagem", e.target.value)} /></Field>
+            <Field label="Mensagem de follow-up (referência de tom — a IA reescreve com base no histórico)"><Textarea rows={3} value={cfg.follow_up_mensagem ?? ""} onChange={(e) => set("follow_up_mensagem", e.target.value)} /></Field>
           </Card>
         </TabsContent>
 
