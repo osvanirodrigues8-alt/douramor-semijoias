@@ -8,6 +8,9 @@ import {
   detectarIntencaoCompra,
   detectarTipoConversa,
   detectarTemperatura,
+  transcreverAudio,
+  descreverImagem,
+  extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
 
 const cors = {
