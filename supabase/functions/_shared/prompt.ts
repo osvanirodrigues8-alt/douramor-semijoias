@@ -27,8 +27,10 @@ export function buildSystemPrompt(opts: {
   tipoConversa?: TipoConversa;
   temperatura?: Temperatura;
   modoFollowup?: 1 | 2 | 3 | null; // ângulo de follow-up
+  podeOferecerCupom?: boolean; // se já passou pelas tentativas e cliente nunca usou
+  descricaoMidia?: string | null; // descrição de áudio transcrito ou imagem analisada
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? "informal";
