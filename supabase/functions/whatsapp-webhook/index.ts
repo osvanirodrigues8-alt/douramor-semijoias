@@ -137,7 +137,10 @@ Deno.serve(async (req) => {
       conversa = nova!;
     }
 
-    await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text });
+    await supabase.from("mensagens").insert({
+      conversa_id: conversa.id, papel: "user", conteudo: text,
+      midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao,
+    });
 
     // Cliente respondeu → reset cadência follow-up + atualiza data_ultimo_contato
     await supabase.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
