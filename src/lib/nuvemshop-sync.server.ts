@@ -9,6 +9,9 @@ type NSProduct = {
   id: number | string;
   name?: string | { pt?: string; es?: string; en?: string };
   description?: string | { pt?: string; es?: string; en?: string };
+  handle?: string | { pt?: string; es?: string; en?: string };
+  permalink?: string;
+  canonical_url?: string;
   variants?: NSVariant[];
   images?: NSImage[];
   published?: boolean;
@@ -40,7 +43,7 @@ export type SyncResult = {
 export async function syncNuvemshopProducts(): Promise<SyncResult> {
   const { data: conn, error: connErr } = await supabaseAdmin
     .from("nuvemshop_connections")
-    .select("store_id, access_token")
+    .select("store_id, access_token, dominio_loja")
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -49,6 +52,8 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
   if (!conn) {
     return { total: 0, criados: 0, atualizados: 0, erros: 0, mensagem: "Nenhuma loja Nuvemshop conectada." };
   }
+
+  const dominio = (conn.dominio_loja ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   const headers = {
     Authentication: `bearer ${conn.access_token}`,
@@ -92,6 +97,11 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const url_foto = p.images?.[0]?.src ?? null;
       const nome = pickLang(p.name) ?? `Produto ${p.id}`;
       const descricao = stripHtml(pickLang(p.description));
+      const handle = pickLang(p.handle);
+      const url_produto =
+        p.permalink ??
+        p.canonical_url ??
+        (handle && dominio ? `https://${dominio}/produtos/${handle}` : null);
       const status: "inativo" | "esgotado" | "disponivel" =
         p.published === false ? "inativo" : quantidade_estoque <= 0 ? "esgotado" : "disponivel";
 
@@ -102,6 +112,7 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         preco,
         quantidade_estoque,
         url_foto,
+        url_produto,
         categoria: "outro" as const,
         status,
         sincronizado_em: new Date().toISOString(),

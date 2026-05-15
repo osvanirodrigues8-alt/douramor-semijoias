@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
       const { data: matched } = await supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status")
+        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .or(orFilter)
         .limit(40);
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     if (produtos.length < 40) {
       const { data: extra } = await supabase
         .from("produtos")
-        .select("nome,categoria,preco,descricao,quantidade_estoque,status")
+        .select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto")
         .eq("status", "disponivel")
         .order("atualizado_em", { ascending: false })
         .limit(40 - produtos.length);
