@@ -14,7 +14,32 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/produtos")({ component: Produtos });
 
-const CATS = ["anel", "colar", "brinco", "pulseira", "conjunto", "outro"];
+const CATS = [
+  "anel",
+  "colar",
+  "brinco",
+  "pulseira",
+  "bracelete",
+  "tornozeleira",
+  "escapulario",
+  "relogio",
+  "oculos",
+  "conjunto",
+  "outro",
+];
+const CAT_LABEL: Record<string, string> = {
+  anel: "Anéis",
+  colar: "Colares",
+  brinco: "Brincos",
+  pulseira: "Pulseiras",
+  bracelete: "Braceletes",
+  tornozeleira: "Tornozeleiras",
+  escapulario: "Escapulários",
+  relogio: "Relógios",
+  oculos: "Óculos",
+  conjunto: "Conjuntos / Kits",
+  outro: "Outros",
+};
 const PAGE_SIZE = 48;
 
 function Produtos() {
@@ -52,6 +77,12 @@ function Produtos() {
       return true;
     });
   }, [items, q, cat, statusF]);
+
+  const catCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const i of items) c[i.categoria] = (c[i.categoria] ?? 0) + 1;
+    return c;
+  }, [items]);
 
   useEffect(() => {
     setPage(1);
@@ -149,6 +180,34 @@ function Produtos() {
         </div>
       </header>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => setCat("todas")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+            cat === "todas"
+              ? "bg-foreground text-background border-foreground"
+              : "bg-background hover:bg-accent"
+          }`}
+        >
+          Todas <span className="opacity-60">({items.length})</span>
+        </button>
+        {CATS.filter((c) => (catCounts[c] ?? 0) > 0).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setCat(c)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              cat === c
+                ? "bg-foreground text-background border-foreground"
+                : "bg-background hover:bg-accent"
+            }`}
+          >
+            {CAT_LABEL[c] ?? c} <span className="opacity-60">({catCounts[c]})</span>
+          </button>
+        ))}
+      </div>
+
       <Card className="p-4 flex flex-wrap gap-3 items-center">
         <Input
           placeholder="Buscar produto…"
@@ -163,8 +222,8 @@ function Produtos() {
           <SelectContent>
             <SelectItem value="todas">Todas categorias</SelectItem>
             {CATS.map((c) => (
-              <SelectItem key={c} value={c} className="capitalize">
-                {c}
+              <SelectItem key={c} value={c}>
+                {CAT_LABEL[c] ?? c}
               </SelectItem>
             ))}
           </SelectContent>
@@ -268,7 +327,7 @@ function Produtos() {
                     </div>
                   </td>
                   <td className="p-3 font-medium">{p.nome}</td>
-                  <td className="p-3 capitalize">{p.categoria}</td>
+                  <td className="p-3">{CAT_LABEL[p.categoria] ?? p.categoria}</td>
                   <td className="p-3">R$ {Number(p.preco).toFixed(2)}</td>
                   <td className="p-3">{p.quantidade_estoque}</td>
                   <td className="p-3">
@@ -426,8 +485,8 @@ function ProdutoDialog({ open, onOpenChange, editing, onSaved }: any) {
                   </SelectTrigger>
                   <SelectContent>
                     {CATS.map((c) => (
-                      <SelectItem key={c} value={c} className="capitalize">
-                        {c}
+                      <SelectItem key={c} value={c}>
+                        {CAT_LABEL[c] ?? c}
                       </SelectItem>
                     ))}
                   </SelectContent>

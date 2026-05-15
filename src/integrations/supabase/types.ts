@@ -777,6 +777,11 @@ export type Database = {
         | "pulseira"
         | "conjunto"
         | "outro"
+        | "relogio"
+        | "oculos"
+        | "bracelete"
+        | "escapulario"
+        | "tornozeleira"
       produto_status: "disponivel" | "esgotado" | "inativo"
     }
     CompositeTypes: {
@@ -936,6 +941,11 @@ export const Constants = {
         "pulseira",
         "conjunto",
         "outro",
+        "relogio",
+        "oculos",
+        "bracelete",
+        "escapulario",
+        "tornozeleira",
       ],
       produto_status: ["disponivel", "esgotado", "inativo"],
     },
