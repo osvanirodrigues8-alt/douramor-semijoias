@@ -283,8 +283,14 @@ export type Database = {
           criado_em: string
           follow_up_count: number
           follow_up_enviado_em: string | null
+          humano_em: string | null
           id: string
+          intencao_compra_em: string | null
+          motivo_humano: string | null
+          precisa_humano: boolean
+          produtos_mostrados: Json
           sessao_token: string
+          tentativas_sem_resultado: number
           ultima_mensagem_em: string
           ultima_mensagem_papel: string | null
         }
@@ -296,8 +302,14 @@ export type Database = {
           criado_em?: string
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          humano_em?: string | null
           id?: string
+          intencao_compra_em?: string | null
+          motivo_humano?: string | null
+          precisa_humano?: boolean
+          produtos_mostrados?: Json
           sessao_token: string
+          tentativas_sem_resultado?: number
           ultima_mensagem_em?: string
           ultima_mensagem_papel?: string | null
         }
@@ -309,8 +321,14 @@ export type Database = {
           criado_em?: string
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          humano_em?: string | null
           id?: string
+          intencao_compra_em?: string | null
+          motivo_humano?: string | null
+          precisa_humano?: boolean
+          produtos_mostrados?: Json
           sessao_token?: string
+          tentativas_sem_resultado?: number
           ultima_mensagem_em?: string
           ultima_mensagem_papel?: string | null
         }
@@ -559,6 +577,7 @@ export type Database = {
           motivo_cancelamento: string | null
           numero: number
           parcelas: number | null
+          pos_venda_enviado_em: string | null
           produtos_ids: string[]
           produtos_snapshot: Json
           status: Database["public"]["Enums"]["pedido_status"]
@@ -583,6 +602,7 @@ export type Database = {
           motivo_cancelamento?: string | null
           numero?: number
           parcelas?: number | null
+          pos_venda_enviado_em?: string | null
           produtos_ids?: string[]
           produtos_snapshot?: Json
           status?: Database["public"]["Enums"]["pedido_status"]
@@ -607,6 +627,7 @@ export type Database = {
           motivo_cancelamento?: string | null
           numero?: number
           parcelas?: number | null
+          pos_venda_enviado_em?: string | null
           produtos_ids?: string[]
           produtos_snapshot?: Json
           status?: Database["public"]["Enums"]["pedido_status"]
