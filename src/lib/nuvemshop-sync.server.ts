@@ -92,7 +92,8 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const url_foto = p.images?.[0]?.src ?? null;
       const nome = pickLang(p.name) ?? `Produto ${p.id}`;
       const descricao = stripHtml(pickLang(p.description));
-      const status = p.published === false ? ("inativo" as const) : undefined;
+      const status: "inativo" | "esgotado" | "disponivel" =
+        p.published === false ? "inativo" : quantidade_estoque <= 0 ? "esgotado" : "disponivel";
 
       return {
         nuvemshop_product_id: String(p.id),
@@ -102,7 +103,7 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
         quantidade_estoque,
         url_foto,
         categoria: "outro" as const,
-        ...(status ? { status } : {}),
+        status,
         sincronizado_em: new Date().toISOString(),
       };
     });
