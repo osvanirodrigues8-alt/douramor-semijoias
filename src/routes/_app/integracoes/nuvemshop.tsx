@@ -143,7 +143,7 @@ function NuvemshopIntegracao() {
         </Card>
       )}
 
-      {!conn && (
+      {!loading && !conn && (
         <Card className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <XCircle className="size-5 text-muted-foreground mt-0.5" />
