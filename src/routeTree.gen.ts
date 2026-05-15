@@ -24,6 +24,7 @@ import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
+import { Route as ApiPublicHooksSyncNuvemshopProductsRouteImport } from './routes/api/public/hooks/sync-nuvemshop-products'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -100,6 +101,12 @@ const ApiPublicNuvemshopCallbackRoute =
     path: '/api/public/nuvemshop/callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksSyncNuvemshopProductsRoute =
+  ApiPublicHooksSyncNuvemshopProductsRouteImport.update({
+    id: '/api/public/hooks/sync-nuvemshop-products',
+    path: '/api/public/hooks/sync-nuvemshop-products',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRoutesByTo {
@@ -131,6 +139,7 @@ export interface FileRoutesByTo {
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRoutesById {
@@ -149,6 +158,7 @@ export interface FileRoutesById {
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
 export interface FileRouteTypes {
@@ -167,6 +177,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/integracoes/nuvemshop'
+    | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -183,6 +194,7 @@ export interface FileRouteTypes {
     | '/produtos'
     | '/relatorios'
     | '/integracoes/nuvemshop'
+    | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   id:
     | '__root__'
@@ -200,6 +212,7 @@ export interface FileRouteTypes {
     | '/_app/produtos'
     | '/_app/relatorios'
     | '/_app/integracoes/nuvemshop'
+    | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesById: FileRoutesById
 }
@@ -207,6 +220,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
 }
 
@@ -317,6 +331,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicNuvemshopCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/sync-nuvemshop-products': {
+      id: '/api/public/hooks/sync-nuvemshop-products'
+      path: '/api/public/hooks/sync-nuvemshop-products'
+      fullPath: '/api/public/hooks/sync-nuvemshop-products'
+      preLoaderRoute: typeof ApiPublicHooksSyncNuvemshopProductsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -354,8 +375,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicHooksSyncNuvemshopProductsRoute:
+    ApiPublicHooksSyncNuvemshopProductsRoute,
   ApiPublicNuvemshopCallbackRoute: ApiPublicNuvemshopCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
