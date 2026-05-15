@@ -618,6 +618,7 @@ export type Database = {
           sincronizado_em: string | null
           status: Database["public"]["Enums"]["produto_status"]
           url_foto: string | null
+          url_produto: string | null
         }
         Insert: {
           atualizado_em?: string
@@ -632,6 +633,7 @@ export type Database = {
           sincronizado_em?: string | null
           status?: Database["public"]["Enums"]["produto_status"]
           url_foto?: string | null
+          url_produto?: string | null
         }
         Update: {
           atualizado_em?: string
@@ -646,6 +648,7 @@ export type Database = {
           sincronizado_em?: string | null
           status?: Database["public"]["Enums"]["produto_status"]
           url_foto?: string | null
+          url_produto?: string | null
         }
         Relationships: []
       }

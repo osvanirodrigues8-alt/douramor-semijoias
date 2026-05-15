@@ -1,0 +1,1 @@
+ALTER TABLE public.produtos ADD COLUMN IF NOT EXISTS url_produto text;
