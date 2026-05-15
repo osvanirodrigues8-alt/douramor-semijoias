@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect, Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app")({
@@ -20,6 +20,7 @@ const nav = [
 
 const navAgent = [
   { to: "/agente", label: "Agente IA", icon: Bot },
+  { to: "/integracoes/nuvemshop", label: "Nuvemshop", icon: Plug },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
