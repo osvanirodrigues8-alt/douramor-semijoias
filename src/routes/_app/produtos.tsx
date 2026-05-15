@@ -188,6 +188,29 @@ function Produtos() {
         </div>
       </header>
 
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-xs text-muted-foreground mr-1">Gênero:</span>
+        {([
+          ["todos", "Todos", items.length],
+          ["feminino", "Feminino", generoCounts.feminino],
+          ["masculino", "Masculino", generoCounts.masculino],
+          ["unissex", "Unissex", generoCounts.unissex],
+        ] as const).map(([val, label, count]) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => setGenero(val)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              genero === val
+                ? "bg-foreground text-background border-foreground"
+                : "bg-background hover:bg-accent"
+            }`}
+          >
+            {label} <span className="opacity-60">({count})</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
