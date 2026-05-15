@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, ExternalLink, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink, Trash2, RefreshCw, Loader2 } from "lucide-react";
+import { syncProdutosNuvemshop } from "@/lib/nuvemshop.functions";
 
 export const Route = createFileRoute("/_app/integracoes/nuvemshop")({
   component: NuvemshopIntegracao,
@@ -28,6 +30,26 @@ type Connection = {
 function NuvemshopIntegracao() {
   const [conn, setConn] = useState<Connection | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const syncFn = useServerFn(syncProdutosNuvemshop);
+
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      const r = await syncFn();
+      if (r.mensagem) {
+        toast.warning(r.mensagem);
+      } else {
+        toast.success(
+          `${r.total} produtos sincronizados (${r.criados} novos, ${r.atualizados} atualizados${r.erros ? `, ${r.erros} erros` : ""})`
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao sincronizar");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -64,9 +86,9 @@ function NuvemshopIntegracao() {
         </p>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Carregando…</p>
-      ) : conn ? (
+      {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+
+      {!loading && conn && (
         <Card className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="size-5 text-green-600 mt-0.5" />
@@ -100,7 +122,28 @@ function NuvemshopIntegracao() {
             </Button>
           </div>
         </Card>
-      ) : (
+      )}
+
+      {conn && (
+        <Card className="p-6 space-y-4 mt-6">
+          <div>
+            <h2 className="font-medium">Sincronização de produtos</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Importa todos os produtos da Nuvemshop para o catálogo. A sincronização automática roda a cada 6 horas.
+            </p>
+          </div>
+          <Button onClick={handleSync} disabled={syncing}>
+            {syncing ? (
+              <Loader2 className="size-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="size-4 mr-2" />
+            )}
+            {syncing ? "Sincronizando..." : "Sincronizar agora"}
+          </Button>
+        </Card>
+      )}
+
+      {!loading && !conn && (
         <Card className="p-6 space-y-4">
           <div className="flex items-start gap-3">
             <XCircle className="size-5 text-muted-foreground mt-0.5" />

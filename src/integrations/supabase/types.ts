@@ -612,8 +612,10 @@ export type Database = {
           descricao: string | null
           id: string
           nome: string
+          nuvemshop_product_id: string | null
           preco: number
           quantidade_estoque: number
+          sincronizado_em: string | null
           status: Database["public"]["Enums"]["produto_status"]
           url_foto: string | null
         }
@@ -624,8 +626,10 @@ export type Database = {
           descricao?: string | null
           id?: string
           nome: string
+          nuvemshop_product_id?: string | null
           preco?: number
           quantidade_estoque?: number
+          sincronizado_em?: string | null
           status?: Database["public"]["Enums"]["produto_status"]
           url_foto?: string | null
         }
@@ -636,8 +640,10 @@ export type Database = {
           descricao?: string | null
           id?: string
           nome?: string
+          nuvemshop_product_id?: string | null
           preco?: number
           quantidade_estoque?: number
+          sincronizado_em?: string | null
           status?: Database["public"]["Enums"]["produto_status"]
           url_foto?: string | null
         }
