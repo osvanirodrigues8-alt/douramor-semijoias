@@ -216,12 +216,25 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     <div className="flex h-full w-full">
       <NodePalette />
       <div className="flex-1 relative">
-        <div className="absolute top-2 left-2 z-10 flex gap-1 bg-background/80 backdrop-blur rounded-md border p-1 shadow-sm">
+        <div className="absolute top-2 left-2 z-10 flex gap-1 bg-background/90 backdrop-blur rounded-md border p-1 shadow-md">
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doUndo} title="Desfazer (Ctrl+Z)">
             <Undo2 className="size-3.5" />
           </Button>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doRedo} title="Refazer (Ctrl+Shift+Z)">
             <Redo2 className="size-3.5" />
+          </Button>
+          <div className="w-px bg-border mx-0.5" />
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => zoomIn({ duration: 200 })} title="Zoom in (+)">
+            <ZoomIn className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => zoomOut({ duration: 200 })} title="Zoom out (-)">
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => fitView({ duration: 400, padding: 0.2 })} title="Ajustar à tela">
+            <Maximize2 className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setLocked((v) => !v)} title={locked ? "Destravar" : "Travar canvas"}>
+            {locked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
           </Button>
           <div className="w-px bg-border mx-0.5" />
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={organizar} title="Auto-organizar">
