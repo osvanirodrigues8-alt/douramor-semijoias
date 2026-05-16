@@ -95,13 +95,50 @@ export async function calcularFreteNuvemshop(params: {
   const { conn, cep, itens } = params;
   if (!itens.length) return { ok: false, erro: "Sem itens para cotação." };
 
-  const url = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
-  const body = {
-    items: itens.map((i) => ({ variant_id: Number(i.variant_id), quantity: i.quantity })),
-    shipping_address: { zipcode: cep.replace(/\D/g, "") },
-  };
-
   try {
+    const variantId = await resolverVariantId(conn, itens[0]);
+    if (!variantId) return { ok: false, erro: "Produto sem variante Nuvemshop para cotação." };
+
+    // A Nuvemshop não expõe cotação como endpoint da API Admin da loja; o próprio storefront usa /frete/.
+    // Chamamos o mesmo endpoint público da loja, com variant_id + CEP, e extraímos as opções retornadas.
+    const base = lojaBase(conn, itens[0].product_url) ?? "https://www.douramor.com.br";
+    const form = new URLSearchParams({
+      cep: cep.replace(/\D/g, ""),
+      variant_id: variantId,
+      quantity: String(Math.max(1, itens[0].quantity || 1)),
+      originShippingCalculation: "productDetail",
+    });
+
+    const storefrontRes = await fetch(`${base}/frete/`, {
+      method: "POST",
+      headers: {
+        "User-Agent": UA,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: itens[0].product_url || base,
+      },
+      body: form.toString(),
+    });
+    const storefrontTxt = await storefrontRes.text();
+    if (storefrontRes.ok) {
+      const payload = JSON.parse(storefrontTxt);
+      if (payload?.success && payload?.html) {
+        const opcoesStorefront = parseOpcoesDoHtml(String(payload.html));
+        if (opcoesStorefront.length) {
+          opcoesStorefront.sort((a, b) => a.preco - b.preco);
+          return { ok: true, opcoes: opcoesStorefront.slice(0, 4) };
+        }
+      }
+      console.error("[frete-ns-storefront] sem opções", storefrontTxt.slice(0, 400));
+    } else {
+      console.error("[frete-ns-storefront] status", storefrontRes.status, storefrontTxt.slice(0, 400));
+    }
+
+    const url = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
+    const body = {
+      items: itens.map((i) => ({ variant_id: Number(i.variant_id ?? variantId), quantity: i.quantity })),
+      shipping_address: { zipcode: cep.replace(/\D/g, "") },
+    };
     const res = await fetch(url, {
       method: "POST",
       headers: {
