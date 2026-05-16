@@ -591,6 +591,131 @@ export type Database = {
         }
         Relationships: []
       }
+      fluxos: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["fluxo_canal"]
+          criado_em: string
+          descricao: string | null
+          id: string
+          nome: string
+          versao_atual: number
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          canal?: Database["public"]["Enums"]["fluxo_canal"]
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          versao_atual?: number
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          canal?: Database["public"]["Enums"]["fluxo_canal"]
+          criado_em?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          versao_atual?: number
+        }
+        Relationships: []
+      }
+      fluxos_nos_log: {
+        Row: {
+          conversa_id: string | null
+          executado_em: string
+          fluxo_id: string | null
+          id: string
+          no_id: string
+          no_tipo: string
+          resultado: Json
+        }
+        Insert: {
+          conversa_id?: string | null
+          executado_em?: string
+          fluxo_id?: string | null
+          id?: string
+          no_id: string
+          no_tipo: string
+          resultado?: Json
+        }
+        Update: {
+          conversa_id?: string | null
+          executado_em?: string
+          fluxo_id?: string | null
+          id?: string
+          no_id?: string
+          no_tipo?: string
+          resultado?: Json
+        }
+        Relationships: []
+      }
+      fluxos_templates: {
+        Row: {
+          categoria: string | null
+          criado_em: string
+          dados: Json
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          categoria?: string | null
+          criado_em?: string
+          dados?: Json
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          categoria?: string | null
+          criado_em?: string
+          dados?: Json
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      fluxos_versoes: {
+        Row: {
+          criado_em: string
+          dados: Json
+          fluxo_id: string
+          id: string
+          publicado_em: string | null
+          versao: number
+        }
+        Insert: {
+          criado_em?: string
+          dados?: Json
+          fluxo_id: string
+          id?: string
+          publicado_em?: string | null
+          versao: number
+        }
+        Update: {
+          criado_em?: string
+          dados?: Json
+          fluxo_id?: string
+          id?: string
+          publicado_em?: string | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fluxos_versoes_fluxo_id_fkey"
+            columns: ["fluxo_id"]
+            isOneToOne: false
+            referencedRelation: "fluxos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       follow_ups: {
         Row: {
           agendado_para: string
@@ -997,6 +1122,7 @@ export type Database = {
       canal: "whatsapp" | "instagram" | "site"
       cupom_tipo: "percentual" | "valor_fixo"
       entrega_tipo: "retirada" | "entrega"
+      fluxo_canal: "site" | "whatsapp" | "instagram" | "todos"
       funil_etapa:
         | "menu"
         | "catalogo"
@@ -1160,6 +1286,7 @@ export const Constants = {
       canal: ["whatsapp", "instagram", "site"],
       cupom_tipo: ["percentual", "valor_fixo"],
       entrega_tipo: ["retirada", "entrega"],
+      fluxo_canal: ["site", "whatsapp", "instagram", "todos"],
       funil_etapa: [
         "menu",
         "catalogo",
