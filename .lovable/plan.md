@@ -1,196 +1,161 @@
-## Visão geral
+# Construtor de Fluxos — Versão Robusta
 
-Construir um **Construtor Visual de Fluxos** dentro de `/agente`, estilo Typebot/ManyChat, onde você desenha o comportamento da Juliana arrastando nós em um canvas. Cada nó representa uma ação (mensagem, pergunta, condição, integração, etc.) e as conexões definem o caminho da conversa.
+Vou transformar o editor atual em um construtor de nível profissional (estilo ManyChat / n8n), mantendo a UX drag-and-drop já existente.
 
-A edge function do WhatsApp e do site executam o fluxo em tempo real: leem o nó atual da conversa, avaliam condições, executam ações e salvam o próximo nó em `conversas.contexto.no_atual`.
+## 1. Novos tipos de nós (25+)
+
+### Mensagens
+- **Enviar imagem** — URL ou foto de produto
+- **Enviar áudio** — URL de áudio (TTS opcional)
+- **Enviar documento** — PDF/catálogo
+- **Botões de resposta rápida** — até 3 opções, cada uma é uma saída
+- **Lista de opções** — menu numerado (1, 2, 3…)
+- **Localização** — envia mapa/endereço da loja
+- **Carrossel de produtos** — múltiplos produtos navegáveis
+
+### Captura
+- **Capturar CEP** (com validação + lookup ViaCEP)
+- **Capturar CPF** (com validação)
+- **Capturar foto/áudio** do cliente
+- **Capturar escolha de botão** (vinculado ao nó de botões)
+
+### Lógica avançada
+- **Condição múltipla (E/OU)** — combina várias condições
+- **Switch / Roteador** — múltiplas saídas baseadas no valor de uma variável
+- **Loop / Repetir** — itera até condição
+- **Random / A/B** — divide fluxo em % para testes
+- **Calculadora** — operações matemáticas em variáveis (ex: total + frete)
+- **Verificar horário** — Sim/Não baseado em horário comercial
+- **Verificar dia da semana**
+- **Contador** — incrementa variável
+
+### IA
+- **Extrair entidades** — extrai produto/cor/tamanho da mensagem
+- **Sentimento** — positivo / neutro / negativo
+- **Resumir conversa** — gera resumo para humano
+- **Gerar imagem** (Lovable AI)
+
+### Dados / CRM
+- **Consultar produto** — busca por nome/SKU
+- **Consultar pedido** — por número
+- **Criar pedido** — gera pedido com produtos no contexto
+- **Atualizar pedido** — muda status
+- **Adicionar tag** ao cliente
+- **Registrar evento no funil**
+
+### Vendas
+- **Calcular frete** (baseado em CEP + taxa configurada)
+- **Gerar link de pagamento** (PIX/cartão)
+- **Aplicar cupom** (valida e calcula desconto)
+- **Solicitar avaliação** (pós-venda)
+
+### Integração
+- **Webhook avançado** — headers customizados, mapeamento de resposta para variáveis
+- **Enviar email** (transacional)
+- **Disparar fluxo de outro fluxo** (sub-fluxos)
+- **Agendar follow-up** programático
+
+### Controle
+- **Marcar tag na conversa** (para filtros)
+- **Pausar fluxo** (deixa Juliana livre)
+- **Goto / Pular para nó** (loops controlados)
+- **Comentário / Nota** (só visual, não executa)
+
+## 2. Melhorias no Editor
+
+- **Undo / Redo** (Ctrl+Z / Ctrl+Shift+Z) com histórico de 50 passos
+- **Copiar / colar nós** (Ctrl+C / Ctrl+V)
+- **Duplicar nó** (Ctrl+D)
+- **Multi-seleção** com Shift+click + mover em grupo
+- **Agrupar nós** em "frames" coloridos com rótulo
+- **Auto-layout** (botão "organizar" — usa dagre para reorganizar)
+- **Busca de nós** no canvas (Ctrl+K)
+- **Minimapa interativo** já presente, adicionar busca dentro dele
+- **Snap to grid** + alinhamento automático
+- **Validação visual** — nós sem conexão de saída ficam com borda vermelha + ícone de aviso
+- **Detector de loops infinitos** — alerta antes de publicar
+- **Variáveis globais do fluxo** — painel separado para definir variáveis iniciais
+- **Autocomplete de variáveis** nos campos textarea (`{{` abre dropdown com vars disponíveis)
+
+## 3. Simulador embutido
+
+Painel lateral ou modal:
+- Inicia conversa simulada
+- Mostra qual nó está executando em tempo real (nó pisca no canvas)
+- Permite digitar respostas simuladas
+- Exibe variáveis acumuladas
+- Sem afetar banco real
+
+## 4. Versionamento & Histórico
+
+- Cada "Publicar" cria nova versão (já existe estrutura)
+- Lista de versões com diff visual
+- Botão "Restaurar versão"
+- Comparar versões lado a lado
+
+## 5. Analytics por nó
+
+- Aproveitar `fluxos_nos_log` que já existe
+- Painel mostra: quantas vezes cada nó executou, % de queda em cada bifurcação, tempo médio
+- Heatmap sobreposto no canvas (nós mais quentes ficam destacados)
+
+## 6. Templates expandidos
+
+Adicionar 7+ templates prontos:
+- Recuperação de carrinho abandonado
+- Qualificação de lead com pontuação
+- Pós-venda + NPS
+- Aniversário do cliente
+- Reativação 30/60/90 dias
+- Atendimento técnico (suporte)
+- Black Friday / Promoção sazonal
+
+## 7. Engine — atualizações
+
+Atualizar `supabase/functions/_shared/fluxo-engine.ts` para suportar todos os novos nós, incluindo:
+- Lookup ViaCEP no nó de CEP
+- Operações matemáticas no nó Calculadora
+- Loop com proteção contra infinito (max 50 iterações)
+- Sub-fluxos com stack de retorno
+- A/B com hash determinístico por cliente
+
+## Detalhes técnicos
 
 ```text
-[Entrada] → [Mensagem] → [Pergunta] → [Condição]──sim──→ [Mostrar produto] → [Fechar venda]
-                                          │
-                                          └─não──→ [Oferecer cupom] → [Escalar humano]
+src/components/fluxo/
+├── node-types.ts          (expandir de 15 → 45+ nós)
+├── FluxoCanvas.tsx        (undo/redo, multi-seleção, atalhos)
+├── FluxoNode.tsx          (badges de validação, animação de execução)
+├── NodePalette.tsx        (busca + categorias colapsáveis)
+├── NodeInspector.tsx      (autocomplete de variáveis)
+├── FluxoSimulator.tsx     [NOVO] — painel de simulação
+├── FluxoAnalytics.tsx     [NOVO] — overlay de métricas
+├── FluxoVariaveis.tsx     [NOVO] — gestão de vars globais
+├── FluxoHistorico.tsx     [NOVO] — versões + diff
+└── utils/
+    ├── auto-layout.ts     [NOVO] — dagre
+    ├── validacao.ts       [NOVO] — detecta loops, nós órfãos
+    └── historico.ts       [NOVO] — undo/redo stack
+
+supabase/functions/_shared/
+├── fluxo-engine.ts        (suporte aos 30+ novos tipos)
+└── fluxo-handlers/        [NOVO] — um arquivo por categoria
+    ├── mensagens.ts
+    ├── logica.ts
+    ├── ia.ts
+    ├── dados.ts
+    ├── vendas.ts
+    └── integracao.ts
 ```
 
-## Canvas visual
+Sem mudanças de schema no banco — as tabelas atuais (`fluxos`, `fluxos_versoes`, `fluxos_nos_log`, `fluxos_templates`) já comportam tudo isso via JSONB.
 
-- Biblioteca: **React Flow** (`@xyflow/react`) — drag-and-drop, zoom, pan, minimapa, conexões com curvas
-- Painel lateral esquerdo: paleta de nós agrupados por categoria
-- Painel lateral direito: editor de propriedades do nó selecionado
-- Topo: nome do fluxo, status (ativo/rascunho), botão "Testar", "Publicar", "Versões"
-- Suporte a múltiplos fluxos (ex: "Fluxo padrão", "Fluxo Black Friday", "Fluxo reativação")
-- Cada canal (site, WhatsApp, Instagram) pode usar um fluxo diferente
+## Escopo / entrega
 
-## Catálogo de nós (40+ tipos)
+É bastante coisa. Posso entregar tudo de uma vez (resposta grande) ou em fases. Recomendo:
 
-### 1. Gatilhos (início)
-- Nova conversa (site / WhatsApp / Instagram)
-- Palavra-chave detectada
-- Carrinho abandonado
-- Aniversário do cliente
-- Inatividade X dias
-- Pedido entregue (pós-venda)
-- Webhook externo
+- **Fase A (já vou começar):** novos nós + undo/redo + busca + autocomplete de variáveis + auto-layout + validação visual + simulador básico
+- **Fase B:** analytics por nó + sub-fluxos + variáveis globais + templates novos
+- **Fase C:** versionamento com diff + heatmap + grupos visuais
 
-### 2. Mensagens
-- Texto simples (com variáveis: `{{nome}}`, `{{ultimo_produto}}`)
-- Texto com variações aleatórias (a IA escolhe uma)
-- Mensagem gerada por IA (prompt customizado + contexto)
-- Imagem / vídeo / áudio / documento
-- Lista de produtos (filtros: categoria, gênero, preço)
-- Card de produto único
-- Carrossel de produtos
-- Botões de resposta rápida
-- Menu numerado
-- Localização / contato
-
-### 3. Capturas (perguntas)
-- Pergunta aberta (salva em variável)
-- Pergunta com opções
-- Capturar nome, email, telefone, CPF, endereço, data
-- Capturar foto/áudio (com transcrição IA)
-- Validação (regex, tipo, obrigatório)
-
-### 4. Lógica
-- Condição (if/else) com operadores: igual, contém, maior, menor, regex, vazio
-- Múltiplas ramificações (switch)
-- Aleatório (A/B test com pesos)
-- Aguardar X segundos/minutos/horas/dias
-- Aguardar resposta do cliente (com timeout)
-- Loop / repetir até
-
-### 5. Dados do cliente
-- Atualizar campo do cliente (temperatura, preferências, budget, estilo)
-- Adicionar tag
-- Remover tag
-- Marcar produto visto / comprado / interesse
-- Incrementar contador
-
-### 6. Vendas
-- Mostrar catálogo filtrado
-- Oferecer cupom (com regras: tentativas, reuso)
-- Calcular parcelamento
-- Criar pedido (status novo)
-- Atualizar status do pedido
-- Enviar link de pagamento
-
-### 7. IA
-- Classificar intenção (compra / dúvida / reclamação / saudação)
-- Detectar sentimento (positivo / neutro / negativo / irritado)
-- Resumir conversa
-- Gerar resposta livre (com persona Juliana)
-- Recomendar produtos (baseado em histórico)
-- Extrair entidades (data, valor, produto)
-
-### 8. Integrações
-- Buscar/atualizar produto na Nuvemshop
-- Criar/atualizar contato no CRM
-- Disparar webhook HTTP (POST/GET)
-- Enviar email
-- Agendar follow-up
-- Notificar humano (WhatsApp/email)
-
-### 9. Controle de fluxo
-- Ir para outro nó
-- Chamar sub-fluxo (reutilizar blocos)
-- Encerrar conversa
-- Transferir para humano (com motivo)
-- Pular para fluxo diferente
-
-## Sistema de variáveis
-
-- **Variáveis do sistema** (read-only): `{{cliente.nome}}`, `{{cliente.temperatura}}`, `{{conversa.canal}}`, `{{ultima_mensagem}}`, `{{data_hoje}}`, `{{hora_atual}}`, `{{config.nome_agente}}`
-- **Variáveis do fluxo** (criadas pelos nós de captura): `{{ocasiao}}`, `{{budget}}`, etc.
-- **Expressões**: `{{cliente.total_pedidos > 0 ? "de novo" : "pela primeira vez"}}`
-
-## Editor de propriedades do nó
-
-Cada tipo de nó tem seu próprio painel:
-- Label (nome interno)
-- Campos específicos do tipo
-- Validações
-- Tratamento de erro (ir pra nó X se falhar)
-- Delay antes de executar
-- Logs / observabilidade
-
-## Testes e debug
-
-- Botão "Testar fluxo" → abre simulador de chat lateral
-- Modo step-by-step (avançar nó por nó)
-- Highlight do nó atual no canvas durante execução
-- Log de execução por conversa (ver caminho que cada cliente percorreu)
-- Histórico de versões com rollback
-
-## Templates prontos
-
-Biblioteca de fluxos pré-montados que você pode importar e adaptar:
-- Vendedora consultiva (atual da Juliana)
-- Recuperação de carrinho
-- Pós-venda + avaliação
-- Aniversariante
-- Reativação 30 dias
-- FAQ guiado
-- Agendamento
-
-## Estrutura técnica
-
-### Banco (5 novas tabelas)
-
-| tabela | campos principais |
-|---|---|
-| `fluxos` | id, nome, descricao, canal, ativo, versao_atual, criado_em |
-| `fluxos_versoes` | id, fluxo_id, versao, dados_json (nós + conexões), publicado_em |
-| `fluxos_nos_log` | id, conversa_id, no_id, executado_em, resultado_json |
-| `fluxos_variaveis` | id, fluxo_id, nome, tipo, valor_padrao |
-| `fluxos_templates` | id, nome, descricao, dados_json |
-
-Acrescentar em `conversas.contexto`: `{ fluxo_id, no_atual, variaveis: {...} }`
-
-### Frontend
-- `src/routes/_app/agente.fluxos.tsx` — lista de fluxos
-- `src/routes/_app/agente.fluxos.$id.tsx` — editor canvas
-- `src/components/fluxo/` — canvas, paleta, painel-propriedades, simulador
-- Dependência nova: `@xyflow/react`
-
-### Engine de execução (edge function)
-- Novo módulo `supabase/functions/_shared/fluxo-engine.ts`
-- Função `executarFluxo(conversaId, mensagemUsuario)` que:
-  1. Carrega fluxo ativo do canal
-  2. Lê `no_atual` do contexto da conversa
-  3. Avalia condições e executa ação do nó
-  4. Salva próximo nó e variáveis
-  5. Loga execução
-- Integrar em `whatsapp-webhook` e `chat`
-
-### Server functions
-- `src/lib/fluxos.functions.ts` — CRUD de fluxos, versões, templates, testes
-
-## Escopo realista — entrega em fases
-
-Construir tudo isso de uma vez é arriscado e pesado. Proponho 3 fases:
-
-**Fase 1 (este plano)** — fundação utilizável:
-- Canvas com React Flow
-- 15 tipos de nós essenciais: gatilho, texto, IA, pergunta, condição, atualizar cliente, mostrar produto, cupom, escalar humano, aguardar, webhook, ir para nó, encerrar, sub-fluxo, classificar intenção
-- 1 fluxo ativo por canal
-- Engine de execução integrada
-- Simulador de teste
-- 3 templates iniciais
-
-**Fase 2** — expansão:
-- Demais 25 tipos de nós
-- Múltiplas versões + rollback
-- A/B testing
-- Logs visuais de execução
-
-**Fase 3** — avançado:
-- Sub-fluxos reutilizáveis
-- Marketplace de templates
-- Métricas por nó (conversão, drop-off)
-- Importar/exportar fluxos em JSON
-
-## Decisão necessária
-
-Confirme antes de eu começar:
-
-1. **OK começar pela Fase 1** (15 nós + canvas + engine)? Ou quer realmente os 40+ nós de cara (vai levar várias rodadas de implementação)?
-2. **Mantém a Juliana atual rodando em paralelo** até o fluxo novo estar pronto? (recomendo SIM)
-3. **Um fluxo por canal** está OK? (ou precisa de múltiplos fluxos ativos com regras de seleção?)
+Confirma se quer **tudo na fase A já** ou se prefere que eu inclua mais coisas da B/C no primeiro envio?

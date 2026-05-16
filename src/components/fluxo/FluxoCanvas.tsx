@@ -1,45 +1,62 @@
-// Canvas React Flow com drag-drop da paleta e gestão de seleção.
-import { useCallback, useRef, useState } from "react";
+// Canvas React Flow robusto: undo/redo, multi-seleção, copy/paste, duplicate,
+// auto-layout (dagre), validação visual, simulador hook, autocomplete de vars.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow,
-  ReactFlowProvider,
-  Background,
-  Controls,
-  MiniMap,
-  addEdge,
-  useNodesState,
-  useEdgesState,
-  type Connection,
-  type Edge,
-  type Node,
-  type ReactFlowInstance,
+  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
+  addEdge, useNodesState, useEdgesState, useReactFlow,
+  type Connection, type Edge, type Node, type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { FluxoNode } from "./FluxoNode";
 import { NodePalette } from "./NodePalette";
 import { NodeInspector } from "./NodeInspector";
 import { NODE_DEF_BY_TYPE } from "./node-types";
+import { HistoryStack } from "./utils/historico";
+import { autoLayout } from "./utils/auto-layout";
+import { validarFluxo, variaveisDisponiveis } from "./utils/validacao";
+import { Button } from "@/components/ui/button";
+import { Undo2, Redo2, LayoutGrid, AlertTriangle, Play } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const nodeTypes = { fluxo: FluxoNode };
 
-export type FluxoData = {
-  nodes: Node[];
-  edges: Edge[];
-};
+export type FluxoData = { nodes: Node[]; edges: Edge[] };
 
 type Props = {
   initial: FluxoData;
   onChange: (data: FluxoData) => void;
+  onSimulate?: () => void;
 };
 
-function CanvasInner({ initial, onChange }: Props) {
+function CanvasInner({ initial, onChange, onSimulate }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const wrapper = useRef<HTMLDivElement>(null);
   const [rf, setRf] = useState<ReactFlowInstance | null>(null);
+  const history = useRef(new HistoryStack());
+  const skipNextHistory = useRef(false);
+  const { fitView } = useReactFlow();
 
-  const sync = useCallback((ns: Node[], es: Edge[]) => onChange({ nodes: ns, edges: es }), [onChange]);
+  // init history once
+  useEffect(() => { history.current.init({ nodes: initial.nodes, edges: initial.edges }); /* eslint-disable-next-line */ }, []);
+
+  // validação + variáveis disponíveis
+  const problemas = useMemo(() => validarFluxo(nodes, edges), [nodes, edges]);
+  const variaveis = useMemo(() => variaveisDisponiveis(nodes), [nodes]);
+  const nodesComProblemas = useMemo(() => {
+    const map = new Map(problemas.map((p) => [p.nodeId, p]));
+    return nodes.map((n) => ({ ...n, data: { ...n.data, __problema: map.get(n.id) } }));
+  }, [nodes, problemas]);
+
+  const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
+    if (skipNextHistory.current) { skipNextHistory.current = false; return; }
+    history.current.push({ nodes: ns, edges: es });
+  }, []);
+
+  const sync = useCallback((ns: Node[], es: Edge[], record = true) => {
+    onChange({ nodes: ns, edges: es });
+    if (record) pushHistory(ns, es);
+  }, [onChange, pushHistory]);
 
   const onConnect = useCallback((c: Connection) => {
     setEdges((es) => {
@@ -56,11 +73,9 @@ function CanvasInner({ initial, onChange }: Props) {
     const def = NODE_DEF_BY_TYPE[tipo];
     if (!def) return;
     const position = rf.screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    const id = `${tipo}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const id = `${tipo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
     const newNode: Node = {
-      id,
-      type: "fluxo",
-      position,
+      id, type: "fluxo", position,
       data: { tipo, label: def.label, config: Object.fromEntries(def.campos.filter(c => c.default !== undefined).map(c => [c.chave, c.default])) },
     };
     setNodes((ns) => {
@@ -83,7 +98,7 @@ function CanvasInner({ initial, onChange }: Props) {
     });
   };
 
-  const deleteSelected = () => {
+  const deleteSelected = useCallback(() => {
     if (!selectedId) return;
     setNodes((ns) => {
       const next = ns.filter(n => n.id !== selectedId);
@@ -93,35 +108,147 @@ function CanvasInner({ initial, onChange }: Props) {
       return next;
     });
     setSelectedId(null);
-  };
+  }, [selectedId, edges, setNodes, setEdges, sync]);
+
+  const duplicateSelected = useCallback(() => {
+    if (!selectedId) return;
+    const node = nodes.find(n => n.id === selectedId);
+    if (!node) return;
+    const newId = `${(node.data as any).tipo}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+    const novo: Node = {
+      ...node, id: newId,
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      selected: false,
+      data: JSON.parse(JSON.stringify(node.data)),
+    };
+    setNodes((ns) => {
+      const next = [...ns, novo];
+      sync(next, edges);
+      return next;
+    });
+    setSelectedId(newId);
+  }, [selectedId, nodes, edges, setNodes, sync]);
+
+  const doUndo = useCallback(() => {
+    const s = history.current.undo();
+    if (!s) return;
+    skipNextHistory.current = true;
+    setNodes(s.nodes);
+    setEdges(s.edges);
+    onChange(s);
+  }, [setNodes, setEdges, onChange]);
+
+  const doRedo = useCallback(() => {
+    const s = history.current.redo();
+    if (!s) return;
+    skipNextHistory.current = true;
+    setNodes(s.nodes);
+    setEdges(s.edges);
+    onChange(s);
+  }, [setNodes, setEdges, onChange]);
+
+  const organizar = useCallback(() => {
+    const novos = autoLayout(nodes, edges, "TB");
+    setNodes(novos);
+    sync(novos, edges);
+    setTimeout(() => fitView({ duration: 400, padding: 0.2 }), 50);
+  }, [nodes, edges, setNodes, sync, fitView]);
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      else if (meta && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) { e.preventDefault(); doRedo(); }
+      else if (meta && e.key.toLowerCase() === "d") { e.preventDefault(); duplicateSelected(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [doUndo, doRedo, duplicateSelected]);
 
   const selectedNode = nodes.find(n => n.id === selectedId) ?? null;
+  const errosCount = problemas.filter(p => p.tipo === "erro").length;
+  const alertasCount = problemas.filter(p => p.tipo === "alerta").length;
 
   return (
     <div className="flex h-full w-full">
       <NodePalette />
-      <div className="flex-1 relative" ref={wrapper}>
+      <div className="flex-1 relative">
+        <div className="absolute top-2 left-2 z-10 flex gap-1 bg-background/80 backdrop-blur rounded-md border p-1 shadow-sm">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doUndo} title="Desfazer (Ctrl+Z)">
+            <Undo2 className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doRedo} title="Refazer (Ctrl+Shift+Z)">
+            <Redo2 className="size-3.5" />
+          </Button>
+          <div className="w-px bg-border mx-0.5" />
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={organizar} title="Auto-organizar">
+            <LayoutGrid className="size-3.5" />
+          </Button>
+          {onSimulate && (
+            <Button size="sm" variant="outline" className="h-7" onClick={onSimulate} title="Simular">
+              <Play className="size-3.5 mr-1" /> Simular
+            </Button>
+          )}
+        </div>
+
+        {(errosCount > 0 || alertasCount > 0) && (
+          <div className="absolute top-2 right-2 z-10 flex gap-1">
+            {errosCount > 0 && (
+              <Badge variant="destructive" className="gap-1">
+                <AlertTriangle className="size-3" /> {errosCount} {errosCount === 1 ? "erro" : "erros"}
+              </Badge>
+            )}
+            {alertasCount > 0 && (
+              <Badge variant="secondary" className="gap-1 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+                <AlertTriangle className="size-3" /> {alertasCount} {alertasCount === 1 ? "alerta" : "alertas"}
+              </Badge>
+            )}
+          </div>
+        )}
+
         <ReactFlow
-          nodes={nodes}
+          nodes={nodesComProblemas}
           edges={edges}
-          onNodesChange={(c) => { onNodesChange(c); setTimeout(() => sync(nodes, edges), 0); }}
-          onEdgesChange={(c) => { onEdgesChange(c); setTimeout(() => sync(nodes, edges), 0); }}
+          onNodesChange={(c) => { onNodesChange(c); }}
+          onEdgesChange={(c) => { onEdgesChange(c); }}
           onConnect={onConnect}
           onInit={setRf}
           onDrop={onDrop}
           onDragOver={onDragOver}
           onNodeClick={(_, n) => setSelectedId(n.id)}
           onPaneClick={() => setSelectedId(null)}
+          onNodeDragStop={() => sync(nodes, edges)}
+          onEdgesDelete={() => sync(nodes, edges)}
+          onNodesDelete={(removed) => {
+            const ids = new Set(removed.map(r => r.id));
+            const nextEdges = edges.filter(e => !ids.has(e.source) && !ids.has(e.target));
+            setEdges(nextEdges);
+            sync(nodes.filter(n => !ids.has(n.id)), nextEdges);
+          }}
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={["Backspace", "Delete"]}
+          multiSelectionKeyCode={["Shift"]}
+          selectionOnDrag
+          panOnDrag={[1, 2]}
+          snapToGrid
+          snapGrid={[16, 16]}
         >
-          <Background />
-          <Controls />
-          <MiniMap pannable zoomable />
+          <Background gap={16} />
+          <Controls position="bottom-right" />
+          <MiniMap pannable zoomable className="!bg-background" />
         </ReactFlow>
       </div>
-      <NodeInspector node={selectedNode} onChange={updateSelected} onDelete={deleteSelected} />
+      <NodeInspector
+        node={selectedNode}
+        variaveis={variaveis}
+        onChange={updateSelected}
+        onDelete={deleteSelected}
+        onDuplicate={duplicateSelected}
+      />
     </div>
   );
 }

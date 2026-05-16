@@ -8,6 +8,7 @@ import { ArrowLeft, Save, FileDown, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FluxoCanvas, type FluxoData } from "@/components/fluxo/FluxoCanvas";
+import { FluxoSimulator } from "@/components/fluxo/FluxoSimulator";
 
 export const Route = createFileRoute("/_app/fluxos/$id")({ component: FluxoEditor });
 
@@ -19,6 +20,7 @@ function FluxoEditor() {
   const [data, setData] = useState<FluxoData>({ nodes: [], edges: [] });
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
 
   const load = useCallback(async () => {
     const { data: f } = await supabase.from("fluxos").select("*").eq("id", id).maybeSingle();
@@ -122,8 +124,9 @@ function FluxoEditor() {
         </Button>
       </header>
       <div className="flex-1 min-h-0">
-        <FluxoCanvas key={versao.id} initial={data} onChange={handleChange} />
+        <FluxoCanvas key={versao.id} initial={data} onChange={handleChange} onSimulate={() => setSimOpen(true)} />
       </div>
+      <FluxoSimulator open={simOpen} onOpenChange={setSimOpen} nodes={data.nodes} edges={data.edges} />
     </div>
   );
 }
