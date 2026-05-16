@@ -21,6 +21,8 @@ function FluxoEditor() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
+  const [execIds, setExecIds] = useState<string[]>([]);
+  const [curId, setCurId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const { data: f } = await supabase.from("fluxos").select("*").eq("id", id).maybeSingle();
