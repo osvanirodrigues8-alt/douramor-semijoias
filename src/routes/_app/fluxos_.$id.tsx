@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -54,6 +54,11 @@ function FluxoEditor() {
     setData(d);
     setDirty(true);
   }, []);
+
+  const initialCanvasData = useMemo<FluxoData>(() => ({
+    nodes: data.nodes,
+    edges: data.edges,
+  }), [data.nodes, data.edges]);
 
   const save = async () => {
     if (!fluxo || !versao) return;
@@ -128,7 +133,7 @@ function FluxoEditor() {
       <div className="flex-1 min-h-0">
         <FluxoCanvas
           key={versao.id}
-          initial={data}
+          initial={initialCanvasData}
           onChange={handleChange}
           onSimulate={() => setSimOpen(true)}
           executedIds={execIds}
