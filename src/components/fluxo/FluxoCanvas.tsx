@@ -53,15 +53,17 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const nodesComProblemas = useMemo(() => {
     const map = new Map(problemas.map((p) => [p.nodeId, p]));
     const exec = new Set(executedIds ?? []);
-    return nodes.map((n) => ({
-      ...n,
-      data: {
-        ...n.data,
-        __problema: map.get(n.id),
-        __visitado: exec.has(n.id),
-        __executando: currentId === n.id,
-      },
-    }));
+    return nodes.map((n) => {
+      const problema = map.get(n.id);
+      const visitado = exec.has(n.id);
+      const executando = currentId === n.id;
+      const prev = n.data as any;
+      // Se nada mudou para este nó, devolve a mesma referência (evita loop no ReactFlow)
+      if (prev?.__problema === problema && prev?.__visitado === visitado && prev?.__executando === executando) {
+        return n;
+      }
+      return { ...n, data: { ...n.data, __problema: problema, __visitado: visitado, __executando: executando } };
+    });
   }, [nodes, problemas, executedIds, currentId]);
 
   
