@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
 import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
+import { Route as AppFluxosRouteImport } from './routes/_app/fluxos'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppCuponsRouteImport } from './routes/_app/cupons'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
@@ -26,6 +27,7 @@ import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
 import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
+import { Route as AppFluxosIdRouteImport } from './routes/_app/fluxos.$id'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
 import { Route as ApiPublicHooksSyncNuvemshopProductsRouteImport } from './routes/api/public/hooks/sync-nuvemshop-products'
 
@@ -56,6 +58,11 @@ const AppProdutosRoute = AppProdutosRouteImport.update({
 const AppPedidosRoute = AppPedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFluxosRoute = AppFluxosRouteImport.update({
+  id: '/fluxos',
+  path: '/fluxos',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -113,6 +120,11 @@ const AppIntegracoesNuvemshopRoute = AppIntegracoesNuvemshopRouteImport.update({
   path: '/integracoes/nuvemshop',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFluxosIdRoute = AppFluxosIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppFluxosRoute,
+} as any)
 const ApiPublicNuvemshopCallbackRoute =
   ApiPublicNuvemshopCallbackRouteImport.update({
     id: '/api/public/nuvemshop/callback',
@@ -137,9 +149,11 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/fluxos': typeof AppFluxosRouteWithChildren
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -157,9 +171,11 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
+  '/fluxos': typeof AppFluxosRouteWithChildren
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -179,9 +195,11 @@ export interface FileRoutesById {
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/cupons': typeof AppCuponsRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/fluxos': typeof AppFluxosRouteWithChildren
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
+  '/_app/fluxos/$id': typeof AppFluxosIdRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -201,9 +219,11 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/cupons'
     | '/dashboard'
+    | '/fluxos'
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
+    | '/fluxos/$id'
     | '/integracoes/nuvemshop'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
@@ -221,9 +241,11 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/cupons'
     | '/dashboard'
+    | '/fluxos'
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
+    | '/fluxos/$id'
     | '/integracoes/nuvemshop'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
@@ -242,9 +264,11 @@ export interface FileRouteTypes {
     | '/_app/configuracoes'
     | '/_app/cupons'
     | '/_app/dashboard'
+    | '/_app/fluxos'
     | '/_app/pedidos'
     | '/_app/produtos'
     | '/_app/relatorios'
+    | '/_app/fluxos/$id'
     | '/_app/integracoes/nuvemshop'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
@@ -304,6 +328,13 @@ declare module '@tanstack/react-router' {
       path: '/pedidos'
       fullPath: '/pedidos'
       preLoaderRoute: typeof AppPedidosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/fluxos': {
+      id: '/_app/fluxos'
+      path: '/fluxos'
+      fullPath: '/fluxos'
+      preLoaderRoute: typeof AppFluxosRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -383,6 +414,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIntegracoesNuvemshopRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/fluxos/$id': {
+      id: '/_app/fluxos/$id'
+      path: '/$id'
+      fullPath: '/fluxos/$id'
+      preLoaderRoute: typeof AppFluxosIdRouteImport
+      parentRoute: typeof AppFluxosRoute
+    }
     '/api/public/nuvemshop/callback': {
       id: '/api/public/nuvemshop/callback'
       path: '/api/public/nuvemshop/callback'
@@ -400,6 +438,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppFluxosRouteChildren {
+  AppFluxosIdRoute: typeof AppFluxosIdRoute
+}
+
+const AppFluxosRouteChildren: AppFluxosRouteChildren = {
+  AppFluxosIdRoute: AppFluxosIdRoute,
+}
+
+const AppFluxosRouteWithChildren = AppFluxosRoute._addFileChildren(
+  AppFluxosRouteChildren,
+)
+
 interface AppRouteChildren {
   AppAgendamentosRoute: typeof AppAgendamentosRoute
   AppAgenteRoute: typeof AppAgenteRoute
@@ -409,6 +459,7 @@ interface AppRouteChildren {
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppCuponsRoute: typeof AppCuponsRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppFluxosRoute: typeof AppFluxosRouteWithChildren
   AppPedidosRoute: typeof AppPedidosRoute
   AppProdutosRoute: typeof AppProdutosRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
@@ -424,6 +475,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppCuponsRoute: AppCuponsRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppFluxosRoute: AppFluxosRouteWithChildren,
   AppPedidosRoute: AppPedidosRoute,
   AppProdutosRoute: AppProdutosRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
@@ -445,3 +497,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
