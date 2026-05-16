@@ -136,11 +136,12 @@ function Agente() {
         <Card className="p-6"><p className="text-sm text-muted-foreground">Carregando…</p></Card>
       ) : (
         <Tabs defaultValue="identidade" className="w-full">
-          <TabsList className="grid grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-7 w-full">
             <TabsTrigger value="identidade">Identidade</TabsTrigger>
             <TabsTrigger value="personalidade">Personalidade</TabsTrigger>
             <TabsTrigger value="regras">Regras</TabsTrigger>
             <TabsTrigger value="cupom">Cupom</TabsTrigger>
+            <TabsTrigger value="frete">Frete</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
           </TabsList>
