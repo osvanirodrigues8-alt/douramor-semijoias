@@ -38,9 +38,14 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const history = useRef(new HistoryStack());
   const skipNextHistory = useRef(false);
   const { fitView } = useReactFlow();
+  const lastEmitted = useRef<string>("");
 
-  // init history once
-  useEffect(() => { history.current.init({ nodes: initial.nodes, edges: initial.edges }); /* eslint-disable-next-line */ }, []);
+  // init history + baseline serializado (evita onChange por hidratação inicial)
+  useEffect(() => {
+    history.current.init({ nodes: initial.nodes, edges: initial.edges });
+    lastEmitted.current = JSON.stringify({ nodes: initial.nodes, edges: initial.edges });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // validação + variáveis disponíveis
   const problemas = useMemo(() => validarFluxo(nodes, edges), [nodes, edges]);
@@ -59,7 +64,7 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     }));
   }, [nodes, problemas, executedIds, currentId]);
 
-  const lastEmitted = useRef<string>("");
+  
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
