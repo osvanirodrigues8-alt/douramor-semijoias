@@ -32,7 +32,7 @@ function FluxoEditor() {
       .maybeSingle();
     if (v) {
       setVersao(v);
-      setData((v.dados as FluxoData) ?? { nodes: [], edges: [] });
+      setData((v.dados as unknown as FluxoData) ?? { nodes: [], edges: [] });
     } else {
       // cria versão se não existir
       const { data: nv } = await supabase
