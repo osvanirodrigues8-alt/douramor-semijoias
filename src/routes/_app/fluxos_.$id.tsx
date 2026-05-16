@@ -147,7 +147,7 @@ function FluxoEditor() {
           key={versao.id}
           initial={initialData}
           onChange={handleChange}
-          onSimulate={() => setSimOpen(true)}
+          onSimulate={() => { setSimData({ ...pendingCanvasData.current }); setSimOpen(true); }}
           executedIds={execIds}
           currentId={curId}
         />
@@ -155,8 +155,8 @@ function FluxoEditor() {
       <FluxoSimulator
         open={simOpen}
         onOpenChange={setSimOpen}
-        nodes={data.nodes}
-        edges={data.edges}
+        nodes={simData.nodes}
+        edges={simData.edges}
         onHighlight={(ids, cur) => { setExecIds(ids); setCurId(cur); }}
       />
     </div>
