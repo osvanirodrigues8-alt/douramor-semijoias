@@ -75,7 +75,14 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     });
   }, [nodes, problemas, executedIds, currentId]);
 
-  
+  const edgesEstilizadas = useMemo(() => edges.map((e) => ({
+    ...e,
+    type: e.type ?? "smoothstep",
+    animated: e.animated ?? true,
+    style: { strokeWidth: 2, stroke: "hsl(var(--primary))", ...(e.style ?? {}) },
+    markerEnd: e.markerEnd ?? { type: MarkerType.ArrowClosed, color: "hsl(var(--primary))", width: 18, height: 18 },
+  })), [edges]);
+
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
