@@ -3,7 +3,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, FileDown, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -114,15 +113,16 @@ function FluxoEditor() {
           value={fluxo.nome}
           onChange={(e) => { setFluxo({ ...fluxo, nome: e.target.value }); setDirty(true); }}
         />
-        <Select value={fluxo.canal} onValueChange={(v) => { setFluxo({ ...fluxo, canal: v }); setDirty(true); }}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os canais</SelectItem>
-            <SelectItem value="site">Site</SelectItem>
-            <SelectItem value="whatsapp">WhatsApp</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
-          </SelectContent>
-        </Select>
+        <select
+          className="h-9 w-36 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          value={fluxo.canal}
+          onChange={(e) => { setFluxo({ ...fluxo, canal: e.target.value }); setDirty(true); }}
+        >
+          <option value="todos">Todos os canais</option>
+          <option value="site">Site</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="instagram">Instagram</option>
+        </select>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Switch
             checked={fluxo.ativo}
