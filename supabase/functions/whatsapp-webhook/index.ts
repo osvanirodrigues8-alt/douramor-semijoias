@@ -387,14 +387,38 @@ Deno.serve(async (req) => {
       supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }),
     ]);
 
+    const stevoKey = Deno.env.get("STEVO_API_KEY") ?? "";
     const sendResp = await fetch(STEVO_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: Deno.env.get("STEVO_API_KEY") ?? "" },
+      headers: { "Content-Type": "application/json", apikey: stevoKey },
       body: JSON.stringify({ number: numero, text: reply }),
     });
     console.log("[stevo-send]", sendResp.status);
 
-    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
+    // === Envia fotos dos produtos mencionados (até 3) ===
+    const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
+    const enviadasSet = new Set(fotosEnviadasAnt);
+    const produtosMencionados = produtos.filter((p) =>
+      p.url_foto && novosVistosIds.has(p.id) && !enviadasSet.has(p.id)
+    ).slice(0, 3);
+    for (const p of produtosMencionados) {
+      try {
+        const imgResp = await fetch("https://sm-urso.stevo.chat/send/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: stevoKey },
+          body: JSON.stringify({ number: numero, image: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}` }),
+        });
+        console.log("[stevo-img]", p.id, imgResp.status);
+        if (imgResp.ok) enviadasSet.add(p.id);
+      } catch (err) {
+        console.error("[stevo-img-fail]", p.id, err);
+      }
+    }
+    if (produtosMencionados.length) {
+      await supabase.from("conversas").update({ fotos_enviadas: Array.from(enviadasSet) }).eq("id", conversa.id);
+    }
+
+    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, fotos: produtosMencionados.length, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[stevo-webhook] error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
