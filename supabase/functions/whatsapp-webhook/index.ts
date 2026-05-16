@@ -281,14 +281,14 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 30) {
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: extra } = await qy;
@@ -357,8 +357,8 @@ Deno.serve(async (req) => {
         } else {
           // Escolhe produtos pra cotação: já mostrados ou top do filtro
           const nomesMostrados = new Set(jaMostrados.map((n) => n.toLowerCase()));
-          const candidatos = produtos.filter((p) => nomesMostrados.has(String(p.nome).toLowerCase()) && p.nuvemshop_variant_id);
-          const fallback = produtos.filter((p) => p.nuvemshop_variant_id).slice(0, 1);
+          const candidatos = produtos.filter((p) => nomesMostrados.has(String(p.nome).toLowerCase()) && (p.nuvemshop_variant_id || p.nuvemshop_product_id));
+          const fallback = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
           const escolha = (candidatos.length ? candidatos : fallback).slice(0, 1);
           if (!escolha.length) {
             freteFalhou = true;
@@ -366,7 +366,7 @@ Deno.serve(async (req) => {
             const r = await calcularFreteNuvemshop({
               conn,
               cep: cepUsar,
-              itens: escolha.map((p) => ({ variant_id: p.nuvemshop_variant_id!, quantity: 1 })),
+              itens: escolha.map((p) => ({ variant_id: p.nuvemshop_variant_id, product_id: p.nuvemshop_product_id, product_url: p.url_produto, quantity: 1 })),
             });
             if (r.ok) {
               cotacaoFrete = { cep: cepUsar, opcoes: r.opcoes };
