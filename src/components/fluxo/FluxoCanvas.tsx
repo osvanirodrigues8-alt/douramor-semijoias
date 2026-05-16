@@ -228,8 +228,8 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
         <ReactFlow
           nodes={nodesComProblemas}
           edges={edges}
-          onNodesChange={(c) => { onNodesChange(c); }}
-          onEdgesChange={(c) => { onEdgesChange(c); }}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
           onInit={setRf}
           onDrop={onDrop}
