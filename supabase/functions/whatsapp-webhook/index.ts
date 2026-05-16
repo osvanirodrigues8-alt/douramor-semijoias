@@ -253,14 +253,14 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").or(orFilter).limit(60);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 30) {
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: extra } = await qy;
