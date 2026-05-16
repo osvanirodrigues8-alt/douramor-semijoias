@@ -26,9 +26,11 @@ type Props = {
   initial: FluxoData;
   onChange: (data: FluxoData) => void;
   onSimulate?: () => void;
+  executedIds?: string[];
+  currentId?: string | null;
 };
 
-function CanvasInner({ initial, onChange, onSimulate }: Props) {
+function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -45,8 +47,17 @@ function CanvasInner({ initial, onChange, onSimulate }: Props) {
   const variaveis = useMemo(() => variaveisDisponiveis(nodes), [nodes]);
   const nodesComProblemas = useMemo(() => {
     const map = new Map(problemas.map((p) => [p.nodeId, p]));
-    return nodes.map((n) => ({ ...n, data: { ...n.data, __problema: map.get(n.id) } }));
-  }, [nodes, problemas]);
+    const exec = new Set(executedIds ?? []);
+    return nodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        __problema: map.get(n.id),
+        __visitado: exec.has(n.id),
+        __executando: currentId === n.id,
+      },
+    }));
+  }, [nodes, problemas, executedIds, currentId]);
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
