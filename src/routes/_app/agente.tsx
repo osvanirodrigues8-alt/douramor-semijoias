@@ -209,7 +209,7 @@ function Agente() {
                 </Field>
               </div>
               <Field label="Assinatura final (opcional)">
-                <Input placeholder="Ex.: Vera Lucia | JoiaBot" value={cfg.assinatura ?? ""} onChange={(e) => setField("assinatura", e.target.value)} />
+                <Input placeholder="Ex.: Juliana | Douramor Semi Joias" value={cfg.assinatura ?? ""} onChange={(e) => setField("assinatura", e.target.value)} />
               </Field>
               <Field label="Palavras / expressões PROIBIDAS">
                 <Textarea rows={2} placeholder="Ex.: 'mano', 'velho', gírias muito informais…" value={cfg.palavras_proibidas ?? ""} onChange={(e) => setField("palavras_proibidas", e.target.value)} />
