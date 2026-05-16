@@ -59,12 +59,17 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     }));
   }, [nodes, problemas, executedIds, currentId]);
 
+  const lastEmitted = useRef<string>("");
+
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
     history.current.push({ nodes: ns, edges: es });
   }, []);
 
   const sync = useCallback((ns: Node[], es: Edge[], record = true) => {
+    const serialized = JSON.stringify({ nodes: ns, edges: es });
+    if (serialized === lastEmitted.current) return; // nada mudou de fato
+    lastEmitted.current = serialized;
     onChange({ nodes: ns, edges: es });
     if (record) pushHistory(ns, es);
   }, [onChange, pushHistory]);
