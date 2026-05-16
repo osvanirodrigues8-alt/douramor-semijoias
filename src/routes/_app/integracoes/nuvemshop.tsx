@@ -138,13 +138,41 @@ function NuvemshopIntegracao() {
             </p>
           </div>
           <Button onClick={handleSync} disabled={syncing}>
-            {syncing ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="size-4 mr-2" />
-            )}
+            {syncing ? <Loader2 className="size-4 mr-2 animate-spin" /> : <RefreshCw className="size-4 mr-2" />}
             {syncing ? "Sincronizando..." : "Sincronizar agora"}
           </Button>
+        </Card>
+      )}
+
+      {conn && (
+        <Card className="p-6 space-y-4 mt-6">
+          <div>
+            <h2 className="font-medium">Webhook (sync em tempo real)</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Cadastre esta URL no painel da Nuvemshop para receber atualizações instantâneas de produtos e pedidos.
+            </p>
+          </div>
+          <Field label="URL do webhook" value={WEBHOOK_URL} />
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+            <p className="font-medium">Como cadastrar:</p>
+            <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+              <li>Acesse o painel Nuvemshop → Configurações → Notificações → Webhooks</li>
+              <li>Cole a URL acima</li>
+              <li>Marque os eventos: <code>product/updated</code>, <code>product/deleted</code>, <code>order/created</code>, <code>order/updated</code></li>
+              <li>Salve</li>
+            </ol>
+          </div>
+          <div className="text-xs">
+            <span className="text-muted-foreground">Último webhook: </span>
+            {conn.ultimo_webhook_em ? (
+              <span>
+                {new Date(conn.ultimo_webhook_em).toLocaleString("pt-BR")} — <code>{conn.ultimo_webhook_evento}</code>{" "}
+                <span className={conn.ultimo_webhook_status === "ok" ? "text-green-600" : "text-destructive"}>
+                  ({conn.ultimo_webhook_status})
+                </span>
+              </span>
+            ) : <span className="text-muted-foreground">nenhum webhook recebido ainda</span>}
+          </div>
         </Card>
       )}
 
