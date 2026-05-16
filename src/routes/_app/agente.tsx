@@ -136,11 +136,12 @@ function Agente() {
         <Card className="p-6"><p className="text-sm text-muted-foreground">Carregando…</p></Card>
       ) : (
         <Tabs defaultValue="identidade" className="w-full">
-          <TabsList className="grid grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-7 w-full">
             <TabsTrigger value="identidade">Identidade</TabsTrigger>
             <TabsTrigger value="personalidade">Personalidade</TabsTrigger>
             <TabsTrigger value="regras">Regras</TabsTrigger>
             <TabsTrigger value="cupom">Cupom</TabsTrigger>
+            <TabsTrigger value="frete">Frete</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="fluxos">Fluxos</TabsTrigger>
           </TabsList>
@@ -276,7 +277,41 @@ function Agente() {
           </TabsContent>
 
 
-          {/* FAQ */}
+          {/* FRETE */}
+          <TabsContent value="frete">
+            <Card className="p-6 grid gap-4">
+              {!cfgAg ? (
+                <p className="text-sm text-muted-foreground">Carregando…</p>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="text-sm font-medium">Cálculo de frete</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Define como a Juliana responde quando o cliente perguntar sobre frete.
+                    </p>
+                  </div>
+                  <Field label="Modo">
+                    <Select value={cfgAg.frete_modo ?? "nuvemshop"} onValueChange={(v) => setFieldAg("frete_modo", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nuvemshop">Calcular via Nuvemshop (pede CEP)</SelectItem>
+                        <SelectItem value="gratis">Frete grátis pro Brasil todo</SelectItem>
+                        <SelectItem value="manual">Valor fixo (definido em Configurações)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field label="Peso padrão por produto (gramas) — usado quando o produto não tem peso cadastrado">
+                    <Input type="number" min={10} value={cfgAg.frete_peso_padrao_g ?? 200} onChange={(e) => setFieldAg("frete_peso_padrao_g", Number(e.target.value))} />
+                  </Field>
+                  <p className="text-xs text-muted-foreground">
+                    💡 Para o cálculo via Nuvemshop funcionar, a loja precisa estar conectada em Integrações e os produtos precisam ter variantes com peso configurado.
+                  </p>
+                </>
+              )}
+            </Card>
+          </TabsContent>
+
+
           <TabsContent value="faq">
             <Card className="p-6 space-y-4">
               <div className="flex items-center justify-between">

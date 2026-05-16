@@ -31,8 +31,11 @@ export function buildSystemPrompt(opts: {
   podeOferecerCupom?: boolean;
   descricaoMidia?: string | null;
   instrucaoFluxo?: string | null;
+  cotacaoFrete?: { cep: string; opcoes: { nome: string; preco: number; prazo_dias: number | null }[] } | null;
+  freteFalhou?: boolean;
+  pediuFretemasSemCep?: boolean;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep } = opts;
 
   // === Leitura COMPLETA das configurações (cfgAg + cfg legado) ===
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
@@ -294,15 +297,34 @@ Entrega: ${Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS pro Brasil todo
 ${politicaDesconto ? `Política de desconto: ${politicaDesconto}` : `Limite máximo de desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
-  // ====================== 15.b FRETE — REGRA CRÍTICA ======================
-  const freteGratis = Number(cfg?.taxa_entrega ?? 0) === 0;
-  blocos.push(`# FRETE — RESPONDA NA HORA, NUNCA PROMETA "VOU CALCULAR"
-${freteGratis
-  ? `O frete é GRÁTIS pra todo o Brasil. SEMPRE. Não existe cálculo, não existe cotação, não depende de CEP.
-- Se a cliente perguntar "quanto fica o frete?", "qual o valor do frete?", "frete pra [cidade/CEP]?": responda DIRETO "Frete grátis pro Brasil todo 💛 (chega em 5-10 dias úteis com rastreio)".
-- NUNCA diga "vou calcular", "deixa eu ver", "me passa o CEP que eu calculo", "já te retorno com o valor". Isso é PROIBIDO.
-- Se ela insistir em passar o CEP, agradeça e confirme: "Pode deixar! Independente do CEP, o frete é grátis. O prazo é 5-10 dias úteis."`
-  : `O frete é R$ ${cfg?.taxa_entrega} fixo. NUNCA diga "vou calcular" ou "já te retorno com o valor" — responda na hora com esse valor.`}`);
+  // ====================== 15.b FRETE ======================
+  const freteModo = cfgAg?.frete_modo ?? "nuvemshop";
+  if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
+    const linhas = cotacaoFrete.opcoes.map((o) => {
+      const v = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;
+      const p = o.prazo_dias != null ? ` (~${o.prazo_dias} dias úteis)` : "";
+      return `- ${o.nome}: ${v}${p}`;
+    }).join("\n");
+    blocos.push(`# COTAÇÃO DE FRETE — CALCULADA AGORA para CEP ${cotacaoFrete.cep}
+${linhas}
+
+REGRA: use ESSES valores reais na sua resposta. Apresente de forma natural, em 1-2 frases (não em lista crua). Ex: "Pra esse CEP fica R$ X pelos Correios (chega em N dias) ou R$ Y expresso (M dias). Qual prefere?". NUNCA invente valores diferentes.`);
+  } else if (pediuFretemasSemCep) {
+    blocos.push(`# FRETE — PRECISA DO CEP
+A cliente perguntou sobre frete mas NÃO mandou o CEP. Sua resposta DEVE ser apenas: "Me passa seu CEP que eu já calculo pra você 💛" (ou variação curta e natural). NÃO prometa "vou ver", "deixa eu consultar" — peça o CEP de forma direta e simpática.`);
+  } else if (freteFalhou) {
+    blocos.push(`# FRETE — FALHA NA COTAÇÃO
+Tentei cotar o frete agora e o sistema retornou erro. Responda com algo natural tipo "Tive um probleminha pra puxar o valor exato do frete agora — vou chamar minha colega pra te confirmar, tá?" e ADICIONE a tag [ESCALAR] no fim.`);
+  } else if (freteModo === "gratis" || Number(cfg?.taxa_entrega ?? 0) === 0) {
+    blocos.push(`# FRETE
+Frete GRÁTIS pra todo o Brasil (5-10 dias úteis com rastreio). Responda na hora se perguntarem, sem prometer "vou calcular".`);
+  } else if (freteModo === "manual") {
+    blocos.push(`# FRETE
+Frete fixo R$ ${cfg?.taxa_entrega ?? 0}. Responda na hora, sem prometer cálculo.`);
+  } else {
+    blocos.push(`# FRETE — PEÇA O CEP
+Quando perguntarem sobre frete, peça o CEP de forma direta: "Me passa seu CEP que já calculo pra você 💛". NUNCA prometa "vou calcular e te retorno" — o cálculo é instantâneo assim que vier o CEP.`);
+  }
 
   // ====================== 16. PROIBIÇÕES ======================
   if (palavrasProibidas || topicosProibidos) {

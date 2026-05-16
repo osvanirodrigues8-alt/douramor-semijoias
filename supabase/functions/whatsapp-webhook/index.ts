@@ -13,6 +13,7 @@ import {
   extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
 import { executarFluxo } from "../_shared/fluxo-engine.ts";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "../_shared/frete.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -252,14 +253,14 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").or(orFilter).limit(60);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 30) {
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: extra } = await qy;
@@ -308,10 +309,65 @@ Deno.serve(async (req) => {
       && (!jaOferecido || cupomReuso)
       && (!jaUsouCupom || cupomReuso);
 
+    // === FRETE: detectar intenção e CEP ===
+    let cotacaoFrete: { cep: string; opcoes: OpcaoFrete[] } | null = null;
+    let freteFalhou = false;
+    let pediuFretemasSemCep = false;
+    const freteModo = cfgAg?.frete_modo ?? "nuvemshop";
+    const cepNaMsg = extrairCep(text);
+    const cepSalvo = (cliente?.cep as string | undefined) ?? ((conversa.contexto as any)?.cep as string | undefined) ?? null;
+    const cepUsar = cepNaMsg ?? cepSalvo;
+    const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg;
+
+    if (freteModo === "nuvemshop" && querFrete) {
+      if (!cepUsar) {
+        pediuFretemasSemCep = true;
+      } else {
+        const conn = await carregarConexaoNS(supabase);
+        if (!conn) {
+          freteFalhou = true;
+        } else {
+          // Escolhe produtos pra cotação: já mostrados ou top do filtro
+          const nomesMostrados = new Set(jaMostrados.map((n) => n.toLowerCase()));
+          const candidatos = produtos.filter((p) => nomesMostrados.has(String(p.nome).toLowerCase()) && p.nuvemshop_variant_id);
+          const fallback = produtos.filter((p) => p.nuvemshop_variant_id).slice(0, 1);
+          const escolha = (candidatos.length ? candidatos : fallback).slice(0, 1);
+          if (!escolha.length) {
+            freteFalhou = true;
+          } else {
+            const r = await calcularFreteNuvemshop({
+              conn,
+              cep: cepUsar,
+              itens: escolha.map((p) => ({ variant_id: p.nuvemshop_variant_id!, quantity: 1 })),
+            });
+            if (r.ok) {
+              cotacaoFrete = { cep: cepUsar, opcoes: r.opcoes };
+              // Persiste CEP
+              if (cepNaMsg) {
+                await Promise.all([
+                  supabase.from("clientes").update({ cep: cepUsar }).eq("id", cliente.id),
+                  supabase.from("conversas").update({ contexto: { ...(conversa.contexto ?? {}), cep: cepUsar } }).eq("id", conversa.id),
+                ]);
+              }
+            } else {
+              console.error("[frete] falha:", r.erro);
+              freteFalhou = true;
+            }
+          }
+        }
+      }
+    }
+
+    // Precisa buscar produtos com variant_id também — refaz query mínima se necessário
+    if (querFrete && cepUsar && freteModo === "nuvemshop" && !cotacaoFrete && !freteFalhou) {
+      freteFalhou = true;
+    }
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
+      cotacaoFrete, freteFalhou, pediuFretemasSemCep,
     });
 
     const messages = [
