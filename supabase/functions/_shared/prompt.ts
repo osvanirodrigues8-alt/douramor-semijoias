@@ -22,13 +22,14 @@ export function buildSystemPrompt(opts: {
     budget_aproximado?: number | null;
     genero_interesse?: string | null;
     temperatura_lead?: string | null;
+    cupom_negociacao_usado?: boolean | null;
   } | null;
   produtosJaMostrados?: string[];
   tipoConversa?: TipoConversa;
   temperatura?: Temperatura;
-  modoFollowup?: 1 | 2 | 3 | null; // ângulo de follow-up
-  podeOferecerCupom?: boolean; // se já passou pelas tentativas e cliente nunca usou
-  descricaoMidia?: string | null; // descrição de áudio transcrito ou imagem analisada
+  modoFollowup?: 1 | 2 | 3 | null;
+  podeOferecerCupom?: boolean;
+  descricaoMidia?: string | null;
 }) {
   const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia } = opts;
 
