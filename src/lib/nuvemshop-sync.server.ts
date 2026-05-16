@@ -4,7 +4,7 @@ const API_BASE = "https://api.tiendanube.com/v1";
 const USER_AGENT = "Douramor Agente IA (contato@douramor.com.br)";
 
 type NSImage = { src?: string };
-type NSVariant = { price?: string | number | null; stock?: number | null };
+type NSVariant = { id?: number | string; price?: string | number | null; stock?: number | null; weight?: string | number | null };
 type NSProduct = {
   id: number | string;
   name?: string | { pt?: string; es?: string; en?: string };
@@ -149,8 +149,15 @@ export async function syncNuvemshopProducts(): Promise<SyncResult> {
       const categoriasNS = (p.categories ?? []).map((c) => pickLang(c.name) ?? "").filter(Boolean);
       const genero = inferirGenero(nome, categoriasNS, categoria);
 
+      // Variant ID + peso (NS retorna peso em kg) para cálculo de frete
+      const nuvemshop_variant_id = variants[0]?.id != null ? String(variants[0].id) : null;
+      const pesoKg = variants[0]?.weight == null ? null : Number(variants[0].weight);
+      const peso_gramas = pesoKg && pesoKg > 0 ? Math.round(pesoKg * 1000) : 200;
+
       return {
         nuvemshop_product_id: String(p.id),
+        nuvemshop_variant_id,
+        peso_gramas,
         nome,
         descricao,
         preco,
