@@ -1,4 +1,4 @@
-// Calcula frete via API Nuvemshop. Retorna lista de opções normalizadas.
+// Calcula frete via Nuvemshop. Retorna lista de opções normalizadas.
 const NS_API = "https://api.tiendanube.com/v1";
 const UA = "Douramor Agente IA (contato@douramor.com.br)";
 
@@ -14,19 +14,78 @@ export function detectaIntencaoFrete(texto: string): boolean {
   return /(frete|entrega|envio|chega(r)?\s+em|prazo|quanto.*(?:mandar|enviar)|cep)/.test(t);
 }
 
-type Conn = { store_id: string; access_token: string };
+type Conn = { store_id: string; access_token: string; dominio_loja?: string | null };
 
 export async function carregarConexaoNS(supabase: any): Promise<Conn | null> {
   const { data } = await supabase
     .from("nuvemshop_connections")
-    .select("store_id, access_token")
+    .select("store_id, access_token, dominio_loja")
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
   return data ?? null;
 }
 
-type Item = { variant_id: string; quantity: number };
+type Item = { variant_id?: string | null; product_id?: string | null; quantity: number; product_url?: string | null };
+
+function lojaBase(conn: Conn, productUrl?: string | null): string | null {
+  const raw = conn.dominio_loja || productUrl || null;
+  if (!raw) return null;
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const u = new URL(withScheme);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolverVariantId(conn: Conn, item: Item): Promise<string | null> {
+  if (item.variant_id) return String(item.variant_id);
+  if (!item.product_id) return null;
+  const url = `${NS_API}/${conn.store_id}/products/${item.product_id}`;
+  const res = await fetch(url, {
+    headers: {
+      Authentication: `bearer ${conn.access_token}`,
+      "User-Agent": UA,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  const product = await res.json().catch(() => null);
+  const variant = product?.variants?.[0]?.id;
+  return variant != null ? String(variant) : null;
+}
+
+function attr(tag: string, name: string): string | null {
+  const re = new RegExp(`${name}="([^"]*)"`, "i");
+  return tag.match(re)?.[1]?.trim() ?? null;
+}
+
+function parsePreco(value: string | null): number {
+  if (!value) return 0;
+  const clean = value.replace(/\s/g, "").replace(/R\$/i, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
+  const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
+  const opcoes = inputs.map((tag) => {
+    const nome = attr(tag, "data-name") ?? "Frete";
+    const dataPrice = attr(tag, "data-price");
+    const dataCost = attr(tag, "data-cost");
+    const preco = dataPrice != null ? Number(dataPrice) || 0 : parsePreco(dataCost);
+    return { nome: nome.replace(/\s+/g, " ").trim(), preco, prazo_dias: null };
+  }).filter((o) => o.nome && o.preco >= 0);
+  const seen = new Set<string>();
+  return opcoes.filter((o) => {
+    const key = `${o.nome}-${o.preco}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export async function calcularFreteNuvemshop(params: {
   conn: Conn;
@@ -36,13 +95,51 @@ export async function calcularFreteNuvemshop(params: {
   const { conn, cep, itens } = params;
   if (!itens.length) return { ok: false, erro: "Sem itens para cotação." };
 
-  const url = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
-  const body = {
-    items: itens.map((i) => ({ variant_id: Number(i.variant_id), quantity: i.quantity })),
-    shipping_address: { zipcode: cep.replace(/\D/g, "") },
-  };
-
   try {
+    const variantId = await resolverVariantId(conn, itens[0]);
+    if (!variantId) return { ok: false, erro: "Produto sem variante Nuvemshop para cotação." };
+
+    // A Nuvemshop não expõe cotação como endpoint da API Admin da loja; o próprio storefront usa /frete/.
+    // Chamamos o mesmo endpoint público da loja, com variant_id + CEP, e extraímos as opções retornadas.
+    const base = lojaBase(conn, itens[0].product_url) ?? "https://www.douramor.com.br";
+    const form = new URLSearchParams({
+      cep: cep.replace(/\D/g, ""),
+      variant_id: variantId,
+      quantity: String(Math.max(1, itens[0].quantity || 1)),
+      originShippingCalculation: "productDetail",
+    });
+
+    const storefrontRes = await fetch(`${base}/frete/`, {
+      method: "POST",
+      headers: {
+        "User-Agent": UA,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: itens[0].product_url || base,
+      },
+      body: form.toString(),
+    });
+    const storefrontTxt = await storefrontRes.text();
+    if (storefrontRes.ok) {
+      let payload: any = null;
+      try { payload = JSON.parse(storefrontTxt); } catch { payload = null; }
+      if (payload?.success && payload?.html) {
+        const opcoesStorefront = parseOpcoesDoHtml(String(payload.html));
+        if (opcoesStorefront.length) {
+          opcoesStorefront.sort((a, b) => a.preco - b.preco);
+          return { ok: true, opcoes: opcoesStorefront.slice(0, 4) };
+        }
+      }
+      console.error("[frete-ns-storefront] sem opções", storefrontTxt.slice(0, 400));
+    } else {
+      console.error("[frete-ns-storefront] status", storefrontRes.status, storefrontTxt.slice(0, 400));
+    }
+
+    const url = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
+    const body = {
+      items: itens.map((i) => ({ variant_id: Number(i.variant_id ?? variantId), quantity: i.quantity })),
+      shipping_address: { zipcode: cep.replace(/\D/g, "") },
+    };
     const res = await fetch(url, {
       method: "POST",
       headers: {

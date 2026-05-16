@@ -44,7 +44,11 @@ export function buildSystemPrompt(opts: {
   const tamanhoResp = cfg?.tamanho_resposta ?? "media";
   const assinatura = cfgAg?.assinatura ?? cfg?.assinatura ?? "";
   const fraseAbertura = cfgAg?.frase_abertura ?? cfg?.saudacao_whatsapp ?? cfg?.mensagem_boas_vindas ?? "";
-  const contextoLoja = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
+  const freteModoCfg = cfgAg?.frete_modo ?? "nuvemshop";
+  const contextoLojaRaw = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
+  const contextoLoja = freteModoCfg === "nuvemshop"
+    ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
+    : contextoLojaRaw;
   const diferenciais = cfg?.diferenciais_loja ?? "";
   const personalidade = cfg?.personalidade ?? "";
   const promptExtra = cfgAg?.prompt_extra ?? "";
@@ -190,6 +194,8 @@ Formato humano e desejável, NUNCA lista técnica:
 - Preço
 - Link limpo (o WhatsApp gera preview automático com a foto)
 
+CRÍTICO: quando apresentar mais de uma peça, escreva como se cada peça fosse um balão separado. Não jogue vários links grudados. Uma peça por bloco curto.
+
 Use SOMENTE produtos do CATÁLOGO listado abaixo — NUNCA invente.
 Se a peça tiver estoque ≤ ${estoqueBaixo}, mencione com naturalidade: "Olha, dessa só sobraram pouquinhas viu 👀".
 Se a cliente mandou foto/áudio, considere isso na sugestão.`);
@@ -251,9 +257,9 @@ LINGUAGEM DE VALOR (use naturalmente, sem soar comercial):
   blocos.push(`# OBJEÇÕES — sempre VALIDA antes de responder
 - "Tá caro" → "Entendo... me conta, qual seria o orçamento ideal pra você? Tenho opções a partir de R$ [valor real do catálogo abaixo]." Depois mostra opções reais.
 - "Vou pensar" → "Claro, sem pressa! Posso te mandar mais fotos ou prints de avaliações?"
-- "Não conheço a loja" → "Imagina, vou te tranquilizar: somos a Douramor, peças com banho ouro 18k, garantia de 6 meses contra oxidação e 7 dias pra trocar. Frete grátis pro Brasil todo."
+- "Não conheço a loja" → "Imagina, vou te tranquilizar: somos a Douramor, peças com banho ouro 18k, garantia de 6 meses contra oxidação e 7 dias pra trocar. O frete eu calculo certinho pelo seu CEP."
 - "Vi mais barato em outro lugar" → "Provavelmente é banho folheado fininho, que escurece rápido. O nosso é 18k de verdade, dura anos. Mas conta, qual era o preço lá? Vamos ver se rola algo."
-- "Demora pra chegar?" → "Frete GRÁTIS pro Brasil todo, prazo médio de 5-10 dias úteis com rastreio."
+- "Demora pra chegar?" → "Me passa seu CEP que eu calculo o prazo certinho pra você com rastreio."
 - "Tem loja física?" → "Somos só online — assim conseguimos manter o preço mais justo e o frete grátis."
 - "É hipoalergênico?" → "Sim! Trabalhamos com base nobre, ideal pra quem tem pele sensível."`);
 
@@ -293,12 +299,12 @@ A cliente parou de responder. Sua missão: ${angulo}
 Horário de atendimento humano: ${horInicio} às ${horFim} (você pode responder fora disso, mas equipe só assume nesse horário).
 Pagamento aceito: ${(cfg?.formas_pagamento_ativas ?? []).join(", ") || "PIX, cartão, link de pagamento"}.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Entrega: ${Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS pro Brasil todo" : `R$ ${cfg.taxa_entrega}`}. ${cfg?.area_cobertura_entrega ?? ""}
+Entrega: ${freteModo === "nuvemshop" ? "frete calculado pelo CEP na hora" : Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS pro Brasil todo" : `R$ ${cfg.taxa_entrega}`}. ${cfg?.area_cobertura_entrega ?? ""}
 ${politicaDesconto ? `Política de desconto: ${politicaDesconto}` : `Limite máximo de desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
   // ====================== 15.b FRETE ======================
-  const freteModo = cfgAg?.frete_modo ?? "nuvemshop";
+  const freteModo = freteModoCfg;
   if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
     const linhas = cotacaoFrete.opcoes.map((o) => {
       const v = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;
@@ -315,7 +321,7 @@ A cliente perguntou sobre frete mas NÃO mandou o CEP. Sua resposta DEVE ser ape
   } else if (freteFalhou) {
     blocos.push(`# FRETE — FALHA NA COTAÇÃO
 Tentei cotar o frete agora e o sistema retornou erro. Responda com algo natural tipo "Tive um probleminha pra puxar o valor exato do frete agora — vou chamar minha colega pra te confirmar, tá?" e ADICIONE a tag [ESCALAR] no fim.`);
-  } else if (freteModo === "gratis" || Number(cfg?.taxa_entrega ?? 0) === 0) {
+  } else if (freteModo === "gratis" || (freteModo !== "nuvemshop" && Number(cfg?.taxa_entrega ?? 0) === 0)) {
     blocos.push(`# FRETE
 Frete GRÁTIS pra todo o Brasil (5-10 dias úteis com rastreio). Responda na hora se perguntarem, sem prometer "vou calcular".`);
   } else if (freteModo === "manual") {
@@ -374,7 +380,7 @@ Ofereça UMA vez só. Não fique reforçando depois.`);
       blocos.push(`# CUPOM DE NEGOCIAÇÃO — PROIBIDO oferecer agora
 Existe um cupom (${cupomCodigo}, ${cupomPct}%) reservado para casos de objeção REAL de preço APÓS já ter tentado vender por valor.
 - NUNCA mencione cupom, código ou desconto extra antes da etapa 4 do fechamento.
-- Se a cliente pedir desconto cedo: contorne com parcelamento, qualidade, garantia, frete grátis. NÃO cite o cupom.`);
+- Se a cliente pedir desconto cedo: contorne com parcelamento, qualidade, garantia e cálculo correto do frete por CEP. NÃO cite o cupom.`);
     }
   }
 

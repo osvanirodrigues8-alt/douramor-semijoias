@@ -26,6 +26,34 @@ const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar
 
 const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
 
+function separarMensagens(reply: string): string[] {
+  const lines = reply.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const urlCount = (reply.match(/https?:\/\/\S+/g) ?? []).length;
+  if (urlCount <= 1) return [reply.trim()].filter(Boolean);
+  const blocos: string[] = [];
+  let atual: string[] = [];
+  let temUrl = false;
+  for (const line of lines) {
+    if (temUrl && /https?:\/\/\S+/.test(line)) {
+      blocos.push(atual.join("\n"));
+      atual = [line];
+    } else {
+      atual.push(line);
+    }
+    if (/https?:\/\/\S+/.test(line)) temUrl = true;
+  }
+  if (atual.length) blocos.push(atual.join("\n"));
+  return blocos.map((b) => b.trim()).filter(Boolean).slice(0, 6);
+}
+
+async function enviarTexto(numero: string, text: string, stevoKey: string) {
+  return fetch(STEVO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: stevoKey },
+    body: JSON.stringify({ number: numero, text }),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -253,14 +281,14 @@ Deno.serve(async (req) => {
     let produtos: any[] = [];
     if (keywords.length) {
       const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
     if (produtos.length < 30) {
-      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
+      let qy = supabase.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = qy.in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = qy.lte("preco", precoMax);
       const { data: extra } = await qy;
@@ -329,8 +357,8 @@ Deno.serve(async (req) => {
         } else {
           // Escolhe produtos pra cotação: já mostrados ou top do filtro
           const nomesMostrados = new Set(jaMostrados.map((n) => n.toLowerCase()));
-          const candidatos = produtos.filter((p) => nomesMostrados.has(String(p.nome).toLowerCase()) && p.nuvemshop_variant_id);
-          const fallback = produtos.filter((p) => p.nuvemshop_variant_id).slice(0, 1);
+          const candidatos = produtos.filter((p) => nomesMostrados.has(String(p.nome).toLowerCase()) && (p.nuvemshop_variant_id || p.nuvemshop_product_id));
+          const fallback = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
           const escolha = (candidatos.length ? candidatos : fallback).slice(0, 1);
           if (!escolha.length) {
             freteFalhou = true;
@@ -338,7 +366,7 @@ Deno.serve(async (req) => {
             const r = await calcularFreteNuvemshop({
               conn,
               cep: cepUsar,
-              itens: escolha.map((p) => ({ variant_id: p.nuvemshop_variant_id!, quantity: 1 })),
+              itens: escolha.map((p) => ({ variant_id: p.nuvemshop_variant_id, product_id: p.nuvemshop_product_id, product_url: p.url_produto, quantity: 1 })),
             });
             if (r.ok) {
               cotacaoFrete = { cep: cepUsar, opcoes: r.opcoes };
@@ -444,14 +472,17 @@ Deno.serve(async (req) => {
     ]);
 
     const stevoKey = Deno.env.get("STEVO_API_KEY") ?? "";
-    const sendResp = await fetch(STEVO_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: stevoKey },
-      body: JSON.stringify({ number: numero, text: reply }),
-    });
-    console.log("[stevo-send]", sendResp.status);
 
-    // === Envia fotos dos produtos mencionados (até 3) ===
+    // === Envia em blocos separados quando houver vários produtos/links ===
+    const blocosEnvio = separarMensagens(reply);
+    let textoEnviadoOk = true;
+    for (const bloco of blocosEnvio) {
+      const resp = await enviarTexto(numero, bloco, stevoKey);
+      console.log("[stevo-send]", resp.status);
+      textoEnviadoOk = textoEnviadoOk && resp.ok;
+    }
+
+    // === Envia fotos dos produtos mencionados (até 3), usando endpoint correto de mídia ===
     const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
     const enviadasSet = new Set(fotosEnviadasAnt);
     const produtosMencionados = produtos.filter((p) =>
@@ -459,10 +490,15 @@ Deno.serve(async (req) => {
     ).slice(0, 3);
     for (const p of produtosMencionados) {
       try {
-        const imgResp = await fetch("https://sm-urso.stevo.chat/send/image", {
+        const imgResp = await fetch("https://sm-urso.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
-          body: JSON.stringify({ number: numero, image: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}` }),
+          body: JSON.stringify({
+            number: numero,
+            type: "image",
+            url: p.url_foto,
+            caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}${p.url_produto ? `\n${p.url_produto}` : ""}`,
+          }),
         });
         console.log("[stevo-img]", p.id, imgResp.status);
         if (imgResp.ok) enviadasSet.add(p.id);
@@ -474,7 +510,7 @@ Deno.serve(async (req) => {
       await supabase.from("conversas").update({ fotos_enviadas: Array.from(enviadasSet) }).eq("id", conversa.id);
     }
 
-    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, fotos: produtosMencionados.length, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, sent: textoEnviadoOk, blocos: blocosEnvio.length, fotos: produtosMencionados.length, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[stevo-webhook] error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
