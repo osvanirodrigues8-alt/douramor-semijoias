@@ -60,7 +60,7 @@ function NuvemshopIntegracao() {
     setLoading(true);
     const { data, error } = await supabase
       .from("nuvemshop_connections")
-      .select("id, store_id, nome_loja, dominio_loja, scope, criado_em, atualizado_em")
+      .select("id, store_id, nome_loja, dominio_loja, scope, criado_em, atualizado_em, ultimo_webhook_em, ultimo_webhook_evento, ultimo_webhook_status")
       .order("atualizado_em", { ascending: false })
       .limit(1)
       .maybeSingle();
