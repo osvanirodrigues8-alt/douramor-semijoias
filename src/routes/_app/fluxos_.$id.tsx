@@ -77,7 +77,7 @@ function FluxoEditor() {
     setSaving(true);
     const { error: e1 } = await supabase
       .from("fluxos_versoes")
-      .update({ dados: data as any })
+      .update({ dados: pendingCanvasData.current as any })
       .eq("id", versao.id);
     const { error: e2 } = await supabase
       .from("fluxos")
