@@ -25,7 +25,12 @@ type Connection = {
   scope: string | null;
   criado_em: string;
   atualizado_em: string;
+  ultimo_webhook_em: string | null;
+  ultimo_webhook_evento: string | null;
+  ultimo_webhook_status: string | null;
 };
+
+const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nuvemshop-webhook`;
 
 function NuvemshopIntegracao() {
   const [conn, setConn] = useState<Connection | null>(null);
