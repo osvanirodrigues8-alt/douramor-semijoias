@@ -238,6 +238,44 @@ function Agente() {
             </Card>
           </TabsContent>
 
+          {/* CUPOM */}
+          <TabsContent value="cupom">
+            <Card className="p-6 grid gap-4">
+              {!cfgAg ? (
+                <p className="text-sm text-muted-foreground">Carregando configurações do agente…</p>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="text-sm font-medium">Cupom de Negociação</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      A Juliana usa o cupom apenas como último recurso, após tentar fechar sem desconto e o cliente ainda hesitar.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={!!cfgAg.cupom_negociacao_ativo} onCheckedChange={(v) => setFieldAg("cupom_negociacao_ativo", v)} />
+                    <span className="text-sm">Usar cupom como técnica de fechamento</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Código do cupom">
+                      <Input value={cfgAg.cupom_negociacao_codigo ?? ""} onChange={(e) => setFieldAg("cupom_negociacao_codigo", e.target.value.toUpperCase())} placeholder="JULIANA10" />
+                    </Field>
+                    <Field label="Percentual de desconto (%)">
+                      <Input type="number" min={1} max={100} value={cfgAg.cupom_negociacao_percentual ?? 10} onChange={(e) => setFieldAg("cupom_negociacao_percentual", Number(e.target.value))} />
+                    </Field>
+                  </div>
+                  <Field label="Tentativas antes de oferecer o cupom">
+                    <Input type="number" min={0} value={cfgAg.cupom_tentativas_antes ?? 1} onChange={(e) => setFieldAg("cupom_tentativas_antes", Number(e.target.value))} />
+                  </Field>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={!!cfgAg.cupom_permite_reuso} onCheckedChange={(v) => setFieldAg("cupom_permite_reuso", v)} />
+                    <span className="text-sm">Permitir reuso pelo mesmo cliente</span>
+                  </div>
+                </>
+              )}
+            </Card>
+          </TabsContent>
+
+
           {/* FAQ */}
           <TabsContent value="faq">
             <Card className="p-6 space-y-4">
