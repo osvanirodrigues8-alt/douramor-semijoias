@@ -1,4 +1,4 @@
-// Calcula frete via API Nuvemshop. Retorna lista de opções normalizadas.
+// Calcula frete via Nuvemshop. Retorna lista de opções normalizadas.
 const NS_API = "https://api.tiendanube.com/v1";
 const UA = "Douramor Agente IA (contato@douramor.com.br)";
 
@@ -14,19 +14,78 @@ export function detectaIntencaoFrete(texto: string): boolean {
   return /(frete|entrega|envio|chega(r)?\s+em|prazo|quanto.*(?:mandar|enviar)|cep)/.test(t);
 }
 
-type Conn = { store_id: string; access_token: string };
+type Conn = { store_id: string; access_token: string; dominio_loja?: string | null };
 
 export async function carregarConexaoNS(supabase: any): Promise<Conn | null> {
   const { data } = await supabase
     .from("nuvemshop_connections")
-    .select("store_id, access_token")
+    .select("store_id, access_token, dominio_loja")
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
   return data ?? null;
 }
 
-type Item = { variant_id: string; quantity: number };
+type Item = { variant_id?: string | null; product_id?: string | null; quantity: number; product_url?: string | null };
+
+function lojaBase(conn: Conn, productUrl?: string | null): string | null {
+  const raw = conn.dominio_loja || productUrl || null;
+  if (!raw) return null;
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const u = new URL(withScheme);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+async function resolverVariantId(conn: Conn, item: Item): Promise<string | null> {
+  if (item.variant_id) return String(item.variant_id);
+  if (!item.product_id) return null;
+  const url = `${NS_API}/${conn.store_id}/products/${item.product_id}`;
+  const res = await fetch(url, {
+    headers: {
+      Authentication: `bearer ${conn.access_token}`,
+      "User-Agent": UA,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  const product = await res.json().catch(() => null);
+  const variant = product?.variants?.[0]?.id;
+  return variant != null ? String(variant) : null;
+}
+
+function attr(tag: string, name: string): string | null {
+  const re = new RegExp(`${name}="([^"]*)"`, "i");
+  return tag.match(re)?.[1]?.trim() ?? null;
+}
+
+function parsePreco(value: string | null): number {
+  if (!value) return 0;
+  const clean = value.replace(/\s/g, "").replace(/R\$/i, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
+  const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
+  const opcoes = inputs.map((tag) => {
+    const nome = attr(tag, "data-name") ?? "Frete";
+    const dataPrice = attr(tag, "data-price");
+    const dataCost = attr(tag, "data-cost");
+    const preco = dataPrice != null ? Number(dataPrice) || 0 : parsePreco(dataCost);
+    return { nome: nome.replace(/\s+/g, " ").trim(), preco, prazo_dias: null };
+  }).filter((o) => o.nome && o.preco >= 0);
+  const seen = new Set<string>();
+  return opcoes.filter((o) => {
+    const key = `${o.nome}-${o.preco}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export async function calcularFreteNuvemshop(params: {
   conn: Conn;
