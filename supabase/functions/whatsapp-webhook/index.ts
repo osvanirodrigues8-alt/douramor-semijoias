@@ -26,6 +26,34 @@ const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar
 
 const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
 
+function separarMensagens(reply: string): string[] {
+  const lines = reply.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const urlCount = (reply.match(/https?:\/\/\S+/g) ?? []).length;
+  if (urlCount <= 1) return [reply.trim()].filter(Boolean);
+  const blocos: string[] = [];
+  let atual: string[] = [];
+  let temUrl = false;
+  for (const line of lines) {
+    if (temUrl && /https?:\/\/\S+/.test(line)) {
+      blocos.push(atual.join("\n"));
+      atual = [line];
+    } else {
+      atual.push(line);
+    }
+    if (/https?:\/\/\S+/.test(line)) temUrl = true;
+  }
+  if (atual.length) blocos.push(atual.join("\n"));
+  return blocos.map((b) => b.trim()).filter(Boolean).slice(0, 6);
+}
+
+async function enviarTexto(numero: string, text: string, stevoKey: string) {
+  return fetch(STEVO_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: stevoKey },
+    body: JSON.stringify({ number: numero, text }),
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
