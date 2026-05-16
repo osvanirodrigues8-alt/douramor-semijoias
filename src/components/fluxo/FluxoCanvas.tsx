@@ -38,8 +38,16 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const [rf, setRf] = useState<ReactFlowInstance | null>(null);
   const history = useRef(new HistoryStack());
   const skipNextHistory = useRef(false);
-  const { fitView } = useReactFlow();
+  const { fitView, zoomIn, zoomOut } = useReactFlow();
+  const [locked, setLocked] = useState(false);
   const lastEmitted = useRef<string>("");
+
+  const defaultEdgeOptions: DefaultEdgeOptions = {
+    type: "smoothstep",
+    animated: true,
+    style: { strokeWidth: 2, stroke: "hsl(var(--primary))" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "hsl(var(--primary))", width: 18, height: 18 },
+  };
 
   // init history + baseline serializado (evita onChange por hidratação inicial)
   useEffect(() => {
