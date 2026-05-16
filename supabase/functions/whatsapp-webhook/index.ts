@@ -91,9 +91,26 @@ Deno.serve(async (req) => {
         const { data: nova } = await supabase.from("conversas").insert({ sessao_token, canal: "whatsapp", cliente_id: cliId, tipo_conversa: "receptivo" }).select("id, cliente_id").single();
         conv = nova!;
       }
+
+      const { data: ultimaAssistente } = await supabase
+        .from("mensagens")
+        .select("conteudo")
+        .eq("conversa_id", conv.id)
+        .eq("papel", "assistant")
+        .order("criado_em", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (String(ultimaAssistente?.conteudo ?? "").trim() === text.trim()) {
+        return new Response(JSON.stringify({ ok: true, ignored: "eco da mensagem enviada pelo sistema" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+
       await supabase.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: text });
-      // Pausa IA: humano está atendendo
-      await supabase.from("conversas").update({ precisa_humano: false }).eq("id", conv.id);
+      // Pausa IA: humano está atendendo manualmente
+      await supabase.from("conversas").update({
+        precisa_humano: true,
+        motivo_humano: "Atendimento humano manual",
+        humano_em: new Date().toISOString(),
+      }).eq("id", conv.id);
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
