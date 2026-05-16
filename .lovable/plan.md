@@ -1,117 +1,196 @@
-# Reestruturação completa: Dora → Juliana
+## Visão geral
 
-Vou refazer o sistema de IA de vendas em um único ciclo de implementação. O escopo é grande, então abaixo está o plano consolidado — sem mudar nada do que você pediu, só organizando a ordem de execução.
+Construir um **Construtor Visual de Fluxos** dentro de `/agente`, estilo Typebot/ManyChat, onde você desenha o comportamento da Juliana arrastando nós em um canvas. Cada nó representa uma ação (mensagem, pergunta, condição, integração, etc.) e as conexões definem o caminho da conversa.
 
-## 1. Banco de dados (1 migration)
+A edge function do WhatsApp e do site executam o fluxo em tempo real: leem o nó atual da conversa, avaliam condições, executam ações e salvam o próximo nó em `conversas.contexto.no_atual`.
 
-**Nova tabela `configuracoes_agente`** — substitui a configuração espalhada hoje em `configuracoes` para tudo que diz respeito à Juliana. Vou manter `configuracoes` para o resto (loja, pagamento, entrega) e ler ambas no prompt.
+```text
+[Entrada] → [Mensagem] → [Pergunta] → [Condição]──sim──→ [Mostrar produto] → [Fechar venda]
+                                          │
+                                          └─não──→ [Oferecer cupom] → [Escalar humano]
+```
 
-Campos:
-- **Identidade**: `nome_agente` (default "Juliana"), `tom`, `frase_abertura`, `assinatura`, `uso_emoji`, `prompt_extra` (texto livre), `contexto_loja` (texto livre).
-- **Follow-up**: `fup1_horas` (3), `fup2_horas` (5), `fup3_horas` (4), `max_fups_dia` (3), `dias_total` (7), `horario_inicio` (08:00), `horario_fim` (22:00), `respeitar_horario` (bool).
-- **Vendas**: `max_produtos_apresentacao` (3), `estoque_baixo_threshold` (5), `produtos_destaque_ids` (uuid[]), `promocao_ativa_texto`, `promocao_ativa_validade`.
-- **Escalamento**: `palavras_chave_humano` (text[]), `tentativas_antes_escalar` (2), `responsavel_nome`, `responsavel_numero`.
-- **Pós-venda**: `dias_avaliacao` (7), `dias_reativacao` (30), `auto_avaliacao_ativa`, `auto_aniversario_ativa`, `auto_reativacao_ativa`, `auto_datas_comerciais_ativa`.
+## Canvas visual
 
-**Alterações em tabelas existentes**:
-- `conversas`: + `tipo_conversa` ('ativo'|'receptivo'), + `dia_followup_atual` (int), + `fups_enviados_hoje` (int), + `proximo_followup_em` (timestamptz), + `data_inicio_followup` (date).
-- `clientes`: + `categoria_favorita`, + `estilo_preferido`, + `budget_aproximado` (numeric), + `genero_interesse`, + `produtos_vistos` (uuid[]), + `produtos_interesse` (uuid[]), + `produtos_comprados` (uuid[]), + `temperatura_lead` ('quente'|'morno'|'frio'|'inativo'), + `data_aniversario` (date), + `motivo_nao_fechamento`, + `data_ultimo_contato`.
+- Biblioteca: **React Flow** (`@xyflow/react`) — drag-and-drop, zoom, pan, minimapa, conexões com curvas
+- Painel lateral esquerdo: paleta de nós agrupados por categoria
+- Painel lateral direito: editor de propriedades do nó selecionado
+- Topo: nome do fluxo, status (ativo/rascunho), botão "Testar", "Publicar", "Versões"
+- Suporte a múltiplos fluxos (ex: "Fluxo padrão", "Fluxo Black Friday", "Fluxo reativação")
+- Cada canal (site, WhatsApp, Instagram) pode usar um fluxo diferente
 
-RLS: mesmo padrão de staff/admin das tabelas existentes.
+## Catálogo de nós (40+ tipos)
 
-## 2. Prompt e lógica de IA (`supabase/functions/_shared/prompt.ts`)
+### 1. Gatilhos (início)
+- Nova conversa (site / WhatsApp / Instagram)
+- Palavra-chave detectada
+- Carrinho abandonado
+- Aniversário do cliente
+- Inatividade X dias
+- Pedido entregue (pós-venda)
+- Webhook externo
 
-Reescrita completa do `buildSystemPrompt`:
-- Identidade Juliana (humana, nunca admite ser IA — instrução explícita com exemplo do "você é robô?").
-- Estilo: frases curtas, 1 pergunta por vez, reticências/"hm"/"olha" ocasional, emojis moderados (💛 ✨ 💍).
-- **Tipo de conversa** injetado: se receptivo, instrução para LER o histórico e CONTINUAR de onde parou (proibido reapresentar).
-- **Roteiro de diagnóstico** (uso/ocasião/metal/estilo/preço) — uma pergunta por mensagem, na ordem natural.
-- **Apresentação**: máx N produtos (config), formato humano com argumento de venda real, link sempre.
-- **Fechamento por alternativa** (nunca "quer comprar?"): exemplos concretos no prompt.
-- **Cross-sell condicional**.
-- **Objeções**: bloco com cada objeção e o padrão "valida → responde".
-- **Temperatura do lead** + instruções de comportamento por temperatura.
-- **Escalamento**: gatilhos + mensagem exata + flag `[ESCALAR]` ao fim quando decidir escalar.
-- **Restrições**: nunca inventar, nunca admitir IA, nunca repetir produto já mostrado.
+### 2. Mensagens
+- Texto simples (com variáveis: `{{nome}}`, `{{ultimo_produto}}`)
+- Texto com variações aleatórias (a IA escolhe uma)
+- Mensagem gerada por IA (prompt customizado + contexto)
+- Imagem / vídeo / áudio / documento
+- Lista de produtos (filtros: categoria, gênero, preço)
+- Card de produto único
+- Carrossel de produtos
+- Botões de resposta rápida
+- Menu numerado
+- Localização / contato
 
-Helpers expandidos:
-- `SINONIMOS` (já existe, vou ampliar: cordão→colar, aliança→anel, etc.).
-- `detectarTemperatura(historico)` → quente/morno/frio.
-- `detectarTipoConversa(historico)` → ativo/receptivo (presença de mensagem assistant antes da 1ª user).
-- `extrairPerfilCliente(historico)` via IA secundária (chamada no pós-conversa).
+### 3. Capturas (perguntas)
+- Pergunta aberta (salva em variável)
+- Pergunta com opções
+- Capturar nome, email, telefone, CPF, endereço, data
+- Capturar foto/áudio (com transcrição IA)
+- Validação (regex, tipo, obrigatório)
 
-## 3. Webhook (`supabase/functions/whatsapp-webhook/index.ts`)
+### 4. Lógica
+- Condição (if/else) com operadores: igual, contém, maior, menor, regex, vazio
+- Múltiplas ramificações (switch)
+- Aleatório (A/B test com pesos)
+- Aguardar X segundos/minutos/horas/dias
+- Aguardar resposta do cliente (com timeout)
+- Loop / repetir até
 
-- Detecta tipo_conversa na 1ª mensagem e grava em `conversas`.
-- Busca produtos com: sinônimos + filtro preço/gênero/categoria + destaque primeiro + anti-repetição via `produtos_mostrados`.
-- Salva produtos apresentados em `produtos_mostrados` (conversa) e `produtos_vistos` (cliente).
-- Detecta `[ESCALAR]` na resposta → marca `precisa_humano=true`, salva motivo, remove tag da mensagem antes de enviar.
-- Atualiza `temperatura_lead` e `data_ultimo_contato` do cliente.
-- Detecta intenção de compra → marca `intencao_compra_em` + adiciona a `produtos_interesse`.
-- Ao detectar resposta do cliente: zera `fups_enviados_hoje`, `dia_followup_atual`, `data_inicio_followup`.
+### 5. Dados do cliente
+- Atualizar campo do cliente (temperatura, preferências, budget, estilo)
+- Adicionar tag
+- Remover tag
+- Marcar produto visto / comprado / interesse
+- Incrementar contador
 
-## 4. Cron de follow-up (`src/routes/api/public/follow-up-cron.ts`)
+### 6. Vendas
+- Mostrar catálogo filtrado
+- Oferecer cupom (com regras: tentativas, reuso)
+- Calcular parcelamento
+- Criar pedido (status novo)
+- Atualizar status do pedido
+- Enviar link de pagamento
 
-Reescrita para a cadência 3×/dia × 7 dias:
-- Considera `proximo_followup_em` em vez de janela simples de horas.
-- Lê config dinâmica de `configuracoes_agente`.
-- Calcula próximo gatilho: fup1 → fup2 (após fup1_horas) → fup3 (após fup2_horas) → próximo dia 08:00.
-- Cada follow-up recebe instrução de ÂNGULO diferente no prompt (1: retomar contexto; 2: nova info/prova social; 3: direto/urgência real).
-- Respeita horário de atendimento.
-- Após 7 dias sem resposta: marca `temperatura_lead='inativo'` e para os follow-ups.
-- Continua usando ficha do cliente (já implementado) + produtos em foco.
+### 7. IA
+- Classificar intenção (compra / dúvida / reclamação / saudação)
+- Detectar sentimento (positivo / neutro / negativo / irritado)
+- Resumir conversa
+- Gerar resposta livre (com persona Juliana)
+- Recomendar produtos (baseado em histórico)
+- Extrair entidades (data, valor, produto)
 
-## 5. Cron de reativação mensal (novo: `src/routes/api/public/reativacao-cron.ts`)
+### 8. Integrações
+- Buscar/atualizar produto na Nuvemshop
+- Criar/atualizar contato no CRM
+- Disparar webhook HTTP (POST/GET)
+- Enviar email
+- Agendar follow-up
+- Notificar humano (WhatsApp/email)
 
-- Roda 1×/dia, busca clientes com `temperatura_lead='inativo'` e último contato > 30 dias.
-- Envia mensagem de reativação com novidades da `categoria_favorita`.
-- Toggle pelo `auto_reativacao_ativa`.
+### 9. Controle de fluxo
+- Ir para outro nó
+- Chamar sub-fluxo (reutilizar blocos)
+- Encerrar conversa
+- Transferir para humano (com motivo)
+- Pular para fluxo diferente
 
-## 6. Pós-venda (`src/routes/api/public/pos-venda-cron.ts`)
+## Sistema de variáveis
 
-Expandir o que já existe:
-- D+7 entregue → avaliação + novidades (já existe, vou ler config dinâmica).
-- Aniversário → mensagem + cupom (novo bloco; usa `data_aniversario`).
-- Datas comerciais → bloco com datas fixas (10/05, 12/06, 25/12) disparando mensagem proativa para base com `total_pedidos>0`.
-- Extração de perfil pós-conversa → expande para preencher todos os novos campos (`estilo_preferido`, `budget_aproximado`, etc.).
+- **Variáveis do sistema** (read-only): `{{cliente.nome}}`, `{{cliente.temperatura}}`, `{{conversa.canal}}`, `{{ultima_mensagem}}`, `{{data_hoje}}`, `{{hora_atual}}`, `{{config.nome_agente}}`
+- **Variáveis do fluxo** (criadas pelos nós de captura): `{{ocasiao}}`, `{{budget}}`, etc.
+- **Expressões**: `{{cliente.total_pedidos > 0 ? "de novo" : "pela primeira vez"}}`
 
-## 7. Painel `/agente` (`src/routes/_app/agente.tsx`)
+## Editor de propriedades do nó
 
-Reescrita completa da página existente, com tabs/accordion para cada seção do PARTE 8:
-- Identidade · Follow-up · Vendas · Escalamento · Pós-venda · Prompt Avançado.
-- Salva em `configuracoes_agente` (upsert single-row).
-- Multi-select de produtos em destaque (lista de `produtos`).
-- Lista editável de palavras-chave (chips).
-- Toggles individuais para cada automação pós-venda.
+Cada tipo de nó tem seu próprio painel:
+- Label (nome interno)
+- Campos específicos do tipo
+- Validações
+- Tratamento de erro (ir pra nó X se falhar)
+- Delay antes de executar
+- Logs / observabilidade
 
-## 8. Painel `/atendimento`
+## Testes e debug
 
-Pequenos ajustes:
-- Mostra `motivo_humano` em destaque.
-- Botão "Devolver para Juliana" → seta `precisa_humano=false`.
-- Badge vermelho com contador no sidebar (já existe via realtime).
+- Botão "Testar fluxo" → abre simulador de chat lateral
+- Modo step-by-step (avançar nó por nó)
+- Highlight do nó atual no canvas durante execução
+- Log de execução por conversa (ver caminho que cada cliente percorreu)
+- Histórico de versões com rollback
 
-## 9. Agendar crons (após deploy)
+## Templates prontos
 
-Via `supabase--insert`:
-- `follow-up-cron`: a cada 30min.
-- `reativacao-cron`: 1×/dia às 10:00.
-- `pos-venda-cron`: a cada 6h (já existe, manter).
+Biblioteca de fluxos pré-montados que você pode importar e adaptar:
+- Vendedora consultiva (atual da Juliana)
+- Recuperação de carrinho
+- Pós-venda + avaliação
+- Aniversariante
+- Reativação 30 dias
+- FAQ guiado
+- Agendamento
 
-## Arquivos tocados
+## Estrutura técnica
 
-**Criados**: migration · `reativacao-cron.ts`.
-**Reescritos**: `_shared/prompt.ts` · `whatsapp-webhook/index.ts` · `follow-up-cron.ts` · `_app/agente.tsx` · `pos-venda-cron.ts`.
-**Pequenas edições**: `_app/atendimento.tsx`.
+### Banco (5 novas tabelas)
 
-## Compatibilidade
+| tabela | campos principais |
+|---|---|
+| `fluxos` | id, nome, descricao, canal, ativo, versao_atual, criado_em |
+| `fluxos_versoes` | id, fluxo_id, versao, dados_json (nós + conexões), publicado_em |
+| `fluxos_nos_log` | id, conversa_id, no_id, executado_em, resultado_json |
+| `fluxos_variaveis` | id, fluxo_id, nome, tipo, valor_padrao |
+| `fluxos_templates` | id, nome, descricao, dados_json |
 
-A tabela antiga `configuracoes` continua existindo (campos de loja/pagamento/entrega seguem usados). Os campos duplicados (nome_agente, horários, follow-up) passam a ser lidos de `configuracoes_agente` com fallback para `configuracoes` enquanto migro — depois posso limpar.
+Acrescentar em `conversas.contexto`: `{ fluxo_id, no_atual, variaveis: {...} }`
 
-## O que NÃO está no escopo deste plano
+### Frontend
+- `src/routes/_app/agente.fluxos.tsx` — lista de fluxos
+- `src/routes/_app/agente.fluxos.$id.tsx` — editor canvas
+- `src/components/fluxo/` — canvas, paleta, painel-propriedades, simulador
+- Dependência nova: `@xyflow/react`
 
-- Reescrever a UI inteira do sistema (só `/agente` e ajustes mínimos em `/atendimento`).
-- Trocar provedor de WhatsApp (segue Stevo/Evolution).
-- Mudar modelo de IA (segue `cfg.modelo_ia`, default gemini-2.5-flash).
+### Engine de execução (edge function)
+- Novo módulo `supabase/functions/_shared/fluxo-engine.ts`
+- Função `executarFluxo(conversaId, mensagemUsuario)` que:
+  1. Carrega fluxo ativo do canal
+  2. Lê `no_atual` do contexto da conversa
+  3. Avalia condições e executa ação do nó
+  4. Salva próximo nó e variáveis
+  5. Loga execução
+- Integrar em `whatsapp-webhook` e `chat`
 
-Confirma que posso seguir com tudo nesta ordem?
+### Server functions
+- `src/lib/fluxos.functions.ts` — CRUD de fluxos, versões, templates, testes
+
+## Escopo realista — entrega em fases
+
+Construir tudo isso de uma vez é arriscado e pesado. Proponho 3 fases:
+
+**Fase 1 (este plano)** — fundação utilizável:
+- Canvas com React Flow
+- 15 tipos de nós essenciais: gatilho, texto, IA, pergunta, condição, atualizar cliente, mostrar produto, cupom, escalar humano, aguardar, webhook, ir para nó, encerrar, sub-fluxo, classificar intenção
+- 1 fluxo ativo por canal
+- Engine de execução integrada
+- Simulador de teste
+- 3 templates iniciais
+
+**Fase 2** — expansão:
+- Demais 25 tipos de nós
+- Múltiplas versões + rollback
+- A/B testing
+- Logs visuais de execução
+
+**Fase 3** — avançado:
+- Sub-fluxos reutilizáveis
+- Marketplace de templates
+- Métricas por nó (conversão, drop-off)
+- Importar/exportar fluxos em JSON
+
+## Decisão necessária
+
+Confirme antes de eu começar:
+
+1. **OK começar pela Fase 1** (15 nós + canvas + engine)? Ou quer realmente os 40+ nós de cara (vai levar várias rodadas de implementação)?
+2. **Mantém a Juliana atual rodando em paralelo** até o fluxo novo estar pronto? (recomendo SIM)
+3. **Um fluxo por canal** está OK? (ou precisa de múltiplos fluxos ativos com regras de seleção?)

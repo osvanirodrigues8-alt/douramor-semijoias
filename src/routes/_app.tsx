@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, Link, useRouterState, useNavigate } 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug, AlertCircle } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Calendar, Users, Tag, BarChart3, Bot, Settings, LogOut, Star, Plug, AlertCircle, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_app")({
@@ -23,6 +23,7 @@ const nav = [
 
 const navAgent = [
   { to: "/agente", label: "Agente IA", icon: Bot },
+  { to: "/fluxos", label: "Fluxos", icon: Workflow },
   { to: "/integracoes/nuvemshop", label: "Nuvemshop", icon: Plug },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
