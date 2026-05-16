@@ -30,8 +30,9 @@ export function buildSystemPrompt(opts: {
   modoFollowup?: 1 | 2 | 3 | null;
   podeOferecerCupom?: boolean;
   descricaoMidia?: string | null;
+  instrucaoFluxo?: string | null;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo } = opts;
 
   // === Leitura COMPLETA das configurações (cfgAg + cfg legado) ===
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
