@@ -450,6 +450,7 @@ export type Database = {
           dia_followup_atual: number
           follow_up_count: number
           follow_up_enviado_em: string | null
+          fotos_enviadas: string[]
           fups_enviados_hoje: number
           humano_em: string | null
           id: string
@@ -474,6 +475,7 @@ export type Database = {
           dia_followup_atual?: number
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          fotos_enviadas?: string[]
           fups_enviados_hoje?: number
           humano_em?: string | null
           id?: string
@@ -498,6 +500,7 @@ export type Database = {
           dia_followup_atual?: number
           follow_up_count?: number
           follow_up_enviado_em?: string | null
+          fotos_enviadas?: string[]
           fups_enviados_hoje?: number
           humano_em?: string | null
           id?: string

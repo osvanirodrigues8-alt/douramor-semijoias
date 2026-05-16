@@ -1,0 +1,1 @@
+ALTER TABLE public.conversas ADD COLUMN IF NOT EXISTS fotos_enviadas text[] NOT NULL DEFAULT '{}'::text[];
