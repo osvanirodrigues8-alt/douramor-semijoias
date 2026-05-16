@@ -38,6 +38,7 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const history = useRef(new HistoryStack());
   const skipNextHistory = useRef(false);
   const { fitView } = useReactFlow();
+  const lastEmitted = useRef<string>("");
 
   // init history + baseline serializado (evita onChange por hidratação inicial)
   useEffect(() => {
