@@ -37,13 +37,17 @@ function Agente() {
   const endRef = useRef<HTMLDivElement>(null);
 
   const [cfg, setCfg] = useState<any>(null);
+  const [cfgAg, setCfgAg] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [faqs, setFaqs] = useState<Faq[]>([]);
 
   useEffect(() => {
     supabase.from("configuracoes").select("*").limit(1).maybeSingle().then(({ data }) => setCfg(data));
+    supabase.from("configuracoes_agente").select("*").limit(1).maybeSingle().then(({ data }) => setCfgAg(data));
     loadFaqs();
   }, []);
+
+  const setFieldAg = (k: string, v: any) => setCfgAg({ ...cfgAg, [k]: v });
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
