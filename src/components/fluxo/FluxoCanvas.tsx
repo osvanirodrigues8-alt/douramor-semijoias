@@ -74,6 +74,14 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     if (record) pushHistory(ns, es);
   }, [onChange, pushHistory]);
 
+  const handleNodesChange = useCallback((c: Parameters<typeof onNodesChange>[0]) => {
+    onNodesChange(c);
+  }, [onNodesChange]);
+
+  const handleEdgesChange = useCallback((c: Parameters<typeof onEdgesChange>[0]) => {
+    onEdgesChange(c);
+  }, [onEdgesChange]);
+
   const onConnect = useCallback((c: Connection) => {
     setEdges((es) => {
       const next = addEdge({ ...c, animated: true }, es);
