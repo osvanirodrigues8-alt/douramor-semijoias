@@ -27,7 +27,7 @@ import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
 import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
-import { Route as AppFluxosIdRouteImport } from './routes/_app/fluxos.$id'
+import { Route as AppFluxosIdRouteImport } from './routes/_app/fluxos_.$id'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
 import { Route as ApiPublicHooksSyncNuvemshopProductsRouteImport } from './routes/api/public/hooks/sync-nuvemshop-products'
 
@@ -121,9 +121,9 @@ const AppIntegracoesNuvemshopRoute = AppIntegracoesNuvemshopRouteImport.update({
   getParentRoute: () => AppRoute,
 } as any)
 const AppFluxosIdRoute = AppFluxosIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AppFluxosRoute,
+  id: '/fluxos_/$id',
+  path: '/fluxos/$id',
+  getParentRoute: () => AppRoute,
 } as any)
 const ApiPublicNuvemshopCallbackRoute =
   ApiPublicNuvemshopCallbackRouteImport.update({
@@ -149,7 +149,7 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
-  '/fluxos': typeof AppFluxosRouteWithChildren
+  '/fluxos': typeof AppFluxosRoute
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -171,7 +171,7 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
-  '/fluxos': typeof AppFluxosRouteWithChildren
+  '/fluxos': typeof AppFluxosRoute
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -195,11 +195,11 @@ export interface FileRoutesById {
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/cupons': typeof AppCuponsRoute
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/fluxos': typeof AppFluxosRouteWithChildren
+  '/_app/fluxos': typeof AppFluxosRoute
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
-  '/_app/fluxos/$id': typeof AppFluxosIdRoute
+  '/_app/fluxos_/$id': typeof AppFluxosIdRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -268,7 +268,7 @@ export interface FileRouteTypes {
     | '/_app/pedidos'
     | '/_app/produtos'
     | '/_app/relatorios'
-    | '/_app/fluxos/$id'
+    | '/_app/fluxos_/$id'
     | '/_app/integracoes/nuvemshop'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
@@ -414,12 +414,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIntegracoesNuvemshopRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/fluxos/$id': {
-      id: '/_app/fluxos/$id'
-      path: '/$id'
+    '/_app/fluxos_/$id': {
+      id: '/_app/fluxos_/$id'
+      path: '/fluxos/$id'
       fullPath: '/fluxos/$id'
       preLoaderRoute: typeof AppFluxosIdRouteImport
-      parentRoute: typeof AppFluxosRoute
+      parentRoute: typeof AppRoute
     }
     '/api/public/nuvemshop/callback': {
       id: '/api/public/nuvemshop/callback'
@@ -438,18 +438,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AppFluxosRouteChildren {
-  AppFluxosIdRoute: typeof AppFluxosIdRoute
-}
-
-const AppFluxosRouteChildren: AppFluxosRouteChildren = {
-  AppFluxosIdRoute: AppFluxosIdRoute,
-}
-
-const AppFluxosRouteWithChildren = AppFluxosRoute._addFileChildren(
-  AppFluxosRouteChildren,
-)
-
 interface AppRouteChildren {
   AppAgendamentosRoute: typeof AppAgendamentosRoute
   AppAgenteRoute: typeof AppAgenteRoute
@@ -459,10 +447,11 @@ interface AppRouteChildren {
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppCuponsRoute: typeof AppCuponsRoute
   AppDashboardRoute: typeof AppDashboardRoute
-  AppFluxosRoute: typeof AppFluxosRouteWithChildren
+  AppFluxosRoute: typeof AppFluxosRoute
   AppPedidosRoute: typeof AppPedidosRoute
   AppProdutosRoute: typeof AppProdutosRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
+  AppFluxosIdRoute: typeof AppFluxosIdRoute
   AppIntegracoesNuvemshopRoute: typeof AppIntegracoesNuvemshopRoute
 }
 
@@ -475,10 +464,11 @@ const AppRouteChildren: AppRouteChildren = {
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppCuponsRoute: AppCuponsRoute,
   AppDashboardRoute: AppDashboardRoute,
-  AppFluxosRoute: AppFluxosRouteWithChildren,
+  AppFluxosRoute: AppFluxosRoute,
   AppPedidosRoute: AppPedidosRoute,
   AppProdutosRoute: AppProdutosRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
+  AppFluxosIdRoute: AppFluxosIdRoute,
   AppIntegracoesNuvemshopRoute: AppIntegracoesNuvemshopRoute,
 }
 
