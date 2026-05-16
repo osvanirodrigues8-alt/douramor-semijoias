@@ -50,7 +50,7 @@ function FluxoEditor() {
       const loadedData = normalizeFluxoData(v.dados);
       setVersao(v);
       setInitialData(loadedData);
-      setData(loadedData);
+      pendingCanvasData.current = loadedData;
     } else {
       const loadedData = emptyFluxoData();
       // cria versão se não existir
@@ -61,14 +61,14 @@ function FluxoEditor() {
         .single();
       setVersao(nv);
       setInitialData(loadedData);
-      setData(loadedData);
+      pendingCanvasData.current = loadedData;
     }
   }, [id, nav]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleChange = useCallback((d: FluxoData) => {
-    setData(d);
+    pendingCanvasData.current = d;
     setDirty(true);
   }, []);
 
