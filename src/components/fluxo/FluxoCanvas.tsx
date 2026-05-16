@@ -63,7 +63,7 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     }));
   }, [nodes, problemas, executedIds, currentId]);
 
-  const lastEmitted = useRef<string>("");
+  
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
