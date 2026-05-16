@@ -32,7 +32,7 @@ function render(tpl: string, vars: Record<string, any>): string {
 
 export function FluxoSimulator({ open, onOpenChange, nodes, edges }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [vars, setVars] = useState<Record<string, any>>({ "cliente.nome": "Cliente Teste" });
+  const [vars, setVars] = useState<Record<string, any>>({ "cliente.nome": "Cliente Teste", __ultima__: "" });
   const [atual, setAtual] = useState<string | null>(null);
   const [aguardando, setAguardando] = useState<{ variavel?: string } | null>(null);
   const [input, setInput] = useState("");
@@ -48,7 +48,7 @@ export function FluxoSimulator({ open, onOpenChange, nodes, edges }: Props) {
 
   const executar = (startId: string | null, mensagemUser?: string) => {
     let cur = startId;
-    const novoVars = { ...vars, __ultima__: mensagemUser ?? vars.__ultima__ };
+    const novoVars: Record<string, any> = { ...vars, __ultima__: mensagemUser ?? vars.__ultima__ };
     if (aguardando && mensagemUser !== undefined) {
       novoVars[`var.${aguardando.variavel ?? "resposta"}`] = mensagemUser;
       cur = cur ? nextNode(edges, cur) : null;
