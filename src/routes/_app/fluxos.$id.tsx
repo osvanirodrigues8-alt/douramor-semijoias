@@ -126,9 +126,22 @@ function FluxoEditor() {
         </Button>
       </header>
       <div className="flex-1 min-h-0">
-        <FluxoCanvas key={versao.id} initial={data} onChange={handleChange} onSimulate={() => setSimOpen(true)} />
+        <FluxoCanvas
+          key={versao.id}
+          initial={data}
+          onChange={handleChange}
+          onSimulate={() => setSimOpen(true)}
+          executedIds={execIds}
+          currentId={curId}
+        />
       </div>
-      <FluxoSimulator open={simOpen} onOpenChange={setSimOpen} nodes={data.nodes} edges={data.edges} />
+      <FluxoSimulator
+        open={simOpen}
+        onOpenChange={setSimOpen}
+        nodes={data.nodes}
+        edges={data.edges}
+        onHighlight={(ids, cur) => { setExecIds(ids); setCurId(cur); }}
+      />
     </div>
   );
 }
