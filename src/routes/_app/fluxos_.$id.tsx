@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { FluxoCanvas, type FluxoData } from "@/components/fluxo/FluxoCanvas";
 import { FluxoSimulator } from "@/components/fluxo/FluxoSimulator";
 
-export const Route = createFileRoute("/_app/fluxos/$id")({ component: FluxoEditor });
+export const Route = createFileRoute("/_app/fluxos_/$id")({ component: FluxoEditor });
 
 function FluxoEditor() {
   const { id } = Route.useParams();
