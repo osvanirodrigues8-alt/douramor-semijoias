@@ -63,6 +63,10 @@ function Agente() {
     setSaving(true);
     const { id, atualizado_em, ...rest } = cfg;
     const { data, error } = await supabase.from("configuracoes").update({ ...rest, atualizado_em: new Date().toISOString() }).eq("id", id).select();
+    if (cfgAg) {
+      const { id: agId, atualizado_em: _a, criado_em: _c, ...restAg } = cfgAg;
+      await supabase.from("configuracoes_agente").update({ ...restAg, atualizado_em: new Date().toISOString() }).eq("id", agId);
+    }
     setSaving(false);
     if (error) return toast.error(error.message);
     if (!data || data.length === 0) return toast.error("Sem permissão para salvar.");
