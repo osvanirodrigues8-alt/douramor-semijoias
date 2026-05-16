@@ -271,7 +271,7 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
 
         <ReactFlow
           nodes={nodesComProblemas}
-          edges={edges}
+          edges={edgesEstilizadas}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
