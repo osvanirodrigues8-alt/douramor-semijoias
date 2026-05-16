@@ -329,6 +329,8 @@ Deno.serve(async (req) => {
         produtos_vistos: Array.from(novosVistosIds),
         produtos_interesse: Array.from(novosInteresseIds),
         temperatura_lead: temp,
+        ...(podeOferecerCupom && new RegExp(`\\b${(cfgAg?.cupom_negociacao_codigo ?? "JULIANA10")}\\b`, "i").test(reply)
+          ? { cupom_negociacao_oferecido_em: new Date().toISOString() } : {}),
       }).eq("id", cliente.id),
       supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }),
     ]);
