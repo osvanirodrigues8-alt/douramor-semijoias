@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "google/gemini-2.5-flash", messages }),
+      body: JSON.stringify({ model: "openai/gpt-5-mini", messages }),
     });
 
     if (!aiResp.ok) {
