@@ -297,6 +297,11 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
           multiSelectionKeyCode={["Shift"]}
           selectionOnDrag={!locked}
           panOnDrag={locked ? [0, 1, 2] : [1, 2]}
+          panOnScroll
+          panOnScrollSpeed={0.8}
+          zoomOnScroll={false}
+          zoomOnPinch
+          zoomActivationKeyCode={["Meta", "Control"]}
           nodesDraggable={!locked}
           nodesConnectable={!locked}
           elementsSelectable={!locked}
