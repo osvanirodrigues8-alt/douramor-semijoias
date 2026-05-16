@@ -1,0 +1,1 @@
+ALTER TABLE public.configuracoes ALTER COLUMN nome_agente SET DEFAULT 'Juliana';
