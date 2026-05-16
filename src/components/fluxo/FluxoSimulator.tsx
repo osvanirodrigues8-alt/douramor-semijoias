@@ -38,7 +38,8 @@ export function FluxoSimulator({ open, onOpenChange, nodes, edges }: Props) {
   const [input, setInput] = useState("");
 
   const reset = () => {
-    setMsgs([]); setAtual(null); setAguardando(null); setVars({ "cliente.nome": "Cliente Teste" });
+    setMsgs([]); setAtual(null); setAguardando(null);
+    setVars({ "cliente.nome": "Cliente Teste", __ultima__: "" });
   };
 
   const inicial = () => {
