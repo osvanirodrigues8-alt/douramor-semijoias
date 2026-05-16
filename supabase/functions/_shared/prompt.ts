@@ -31,8 +31,11 @@ export function buildSystemPrompt(opts: {
   podeOferecerCupom?: boolean;
   descricaoMidia?: string | null;
   instrucaoFluxo?: string | null;
+  cotacaoFrete?: { cep: string; opcoes: { nome: string; preco: number; prazo_dias: number | null }[] } | null;
+  freteFalhou?: boolean;
+  pediuFretemasSemCep?: boolean;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep } = opts;
 
   // === Leitura COMPLETA das configurações (cfgAg + cfg legado) ===
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
