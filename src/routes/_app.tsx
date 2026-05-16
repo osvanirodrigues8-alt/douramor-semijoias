@@ -23,6 +23,7 @@ const nav = [
 
 const navAgent = [
   { to: "/agente", label: "Agente IA", icon: Bot },
+  { to: "/fluxos", label: "Fluxos", icon: Workflow },
   { to: "/integracoes/nuvemshop", label: "Nuvemshop", icon: Plug },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
