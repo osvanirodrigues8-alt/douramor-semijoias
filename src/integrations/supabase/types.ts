@@ -106,6 +106,7 @@ export type Database = {
           budget_aproximado: number | null
           canal_origem: Database["public"]["Enums"]["canal"]
           categoria_favorita: string | null
+          cep: string | null
           contato: string
           criado_em: string
           cupom_negociacao_oferecido_em: string | null
@@ -130,6 +131,7 @@ export type Database = {
           budget_aproximado?: number | null
           canal_origem: Database["public"]["Enums"]["canal"]
           categoria_favorita?: string | null
+          cep?: string | null
           contato: string
           criado_em?: string
           cupom_negociacao_oferecido_em?: string | null
@@ -154,6 +156,7 @@ export type Database = {
           budget_aproximado?: number | null
           canal_origem?: Database["public"]["Enums"]["canal"]
           categoria_favorita?: string | null
+          cep?: string | null
           contato?: string
           criado_em?: string
           cupom_negociacao_oferecido_em?: string | null
@@ -334,6 +337,8 @@ export type Database = {
           estoque_baixo_threshold: number
           followup_ativo: boolean
           frase_abertura: string | null
+          frete_modo: string
+          frete_peso_padrao_g: number
           fup1_horas: number
           fup2_horas: number
           fup3_horas: number
@@ -375,6 +380,8 @@ export type Database = {
           estoque_baixo_threshold?: number
           followup_ativo?: boolean
           frase_abertura?: string | null
+          frete_modo?: string
+          frete_peso_padrao_g?: number
           fup1_horas?: number
           fup2_horas?: number
           fup3_horas?: number
@@ -416,6 +423,8 @@ export type Database = {
           estoque_baixo_threshold?: number
           followup_ativo?: boolean
           frase_abertura?: string | null
+          frete_modo?: string
+          frete_peso_padrao_g?: number
           fup1_horas?: number
           fup2_horas?: number
           fup3_horas?: number
@@ -982,6 +991,8 @@ export type Database = {
           id: string
           nome: string
           nuvemshop_product_id: string | null
+          nuvemshop_variant_id: string | null
+          peso_gramas: number
           preco: number
           quantidade_estoque: number
           sincronizado_em: string | null
@@ -998,6 +1009,8 @@ export type Database = {
           id?: string
           nome: string
           nuvemshop_product_id?: string | null
+          nuvemshop_variant_id?: string | null
+          peso_gramas?: number
           preco?: number
           quantidade_estoque?: number
           sincronizado_em?: string | null
@@ -1014,6 +1027,8 @@ export type Database = {
           id?: string
           nome?: string
           nuvemshop_product_id?: string | null
+          nuvemshop_variant_id?: string | null
+          peso_gramas?: number
           preco?: number
           quantidade_estoque?: number
           sincronizado_em?: string | null
