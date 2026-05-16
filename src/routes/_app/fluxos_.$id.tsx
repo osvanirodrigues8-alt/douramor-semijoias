@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -28,10 +28,11 @@ function FluxoEditor() {
   const [fluxo, setFluxo] = useState<any>(null);
   const [versao, setVersao] = useState<any>(null);
   const [initialData, setInitialData] = useState<FluxoData | null>(null);
-  const [data, setData] = useState<FluxoData>({ nodes: [], edges: [] });
+  const pendingCanvasData = useRef<FluxoData>({ nodes: [], edges: [] });
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
+  const [simData, setSimData] = useState<FluxoData>({ nodes: [], edges: [] });
   const [execIds, setExecIds] = useState<string[]>([]);
   const [curId, setCurId] = useState<string | null>(null);
 
@@ -49,7 +50,7 @@ function FluxoEditor() {
       const loadedData = normalizeFluxoData(v.dados);
       setVersao(v);
       setInitialData(loadedData);
-      setData(loadedData);
+      pendingCanvasData.current = loadedData;
     } else {
       const loadedData = emptyFluxoData();
       // cria versão se não existir
@@ -60,14 +61,14 @@ function FluxoEditor() {
         .single();
       setVersao(nv);
       setInitialData(loadedData);
-      setData(loadedData);
+      pendingCanvasData.current = loadedData;
     }
   }, [id, nav]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleChange = useCallback((d: FluxoData) => {
-    setData(d);
+    pendingCanvasData.current = d;
     setDirty(true);
   }, []);
 
@@ -76,7 +77,7 @@ function FluxoEditor() {
     setSaving(true);
     const { error: e1 } = await supabase
       .from("fluxos_versoes")
-      .update({ dados: data as any })
+      .update({ dados: pendingCanvasData.current as any })
       .eq("id", versao.id);
     const { error: e2 } = await supabase
       .from("fluxos")
@@ -146,7 +147,7 @@ function FluxoEditor() {
           key={versao.id}
           initial={initialData}
           onChange={handleChange}
-          onSimulate={() => setSimOpen(true)}
+          onSimulate={() => { setSimData({ ...pendingCanvasData.current }); setSimOpen(true); }}
           executedIds={execIds}
           currentId={curId}
         />
@@ -154,8 +155,8 @@ function FluxoEditor() {
       <FluxoSimulator
         open={simOpen}
         onOpenChange={setSimOpen}
-        nodes={data.nodes}
-        edges={data.edges}
+        nodes={simData.nodes}
+        edges={simData.edges}
         onHighlight={(ids, cur) => { setExecIds(ids); setCurId(cur); }}
       />
     </div>
