@@ -44,7 +44,11 @@ export function buildSystemPrompt(opts: {
   const tamanhoResp = cfg?.tamanho_resposta ?? "media";
   const assinatura = cfgAg?.assinatura ?? cfg?.assinatura ?? "";
   const fraseAbertura = cfgAg?.frase_abertura ?? cfg?.saudacao_whatsapp ?? cfg?.mensagem_boas_vindas ?? "";
-  const contextoLoja = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
+  const freteModoCfg = cfgAg?.frete_modo ?? "nuvemshop";
+  const contextoLojaRaw = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
+  const contextoLoja = freteModoCfg === "nuvemshop"
+    ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
+    : contextoLojaRaw;
   const diferenciais = cfg?.diferenciais_loja ?? "";
   const personalidade = cfg?.personalidade ?? "";
   const promptExtra = cfgAg?.prompt_extra ?? "";
@@ -190,6 +194,8 @@ Formato humano e desejável, NUNCA lista técnica:
 - Preço
 - Link limpo (o WhatsApp gera preview automático com a foto)
 
+CRÍTICO: quando apresentar mais de uma peça, escreva como se cada peça fosse um balão separado. Não jogue vários links grudados. Uma peça por bloco curto.
+
 Use SOMENTE produtos do CATÁLOGO listado abaixo — NUNCA invente.
 Se a peça tiver estoque ≤ ${estoqueBaixo}, mencione com naturalidade: "Olha, dessa só sobraram pouquinhas viu 👀".
 Se a cliente mandou foto/áudio, considere isso na sugestão.`);
@@ -298,7 +304,7 @@ ${politicaDesconto ? `Política de desconto: ${politicaDesconto}` : `Limite máx
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
   // ====================== 15.b FRETE ======================
-  const freteModo = cfgAg?.frete_modo ?? "nuvemshop";
+  const freteModo = freteModoCfg;
   if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
     const linhas = cotacaoFrete.opcoes.map((o) => {
       const v = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;
@@ -315,7 +321,7 @@ A cliente perguntou sobre frete mas NÃO mandou o CEP. Sua resposta DEVE ser ape
   } else if (freteFalhou) {
     blocos.push(`# FRETE — FALHA NA COTAÇÃO
 Tentei cotar o frete agora e o sistema retornou erro. Responda com algo natural tipo "Tive um probleminha pra puxar o valor exato do frete agora — vou chamar minha colega pra te confirmar, tá?" e ADICIONE a tag [ESCALAR] no fim.`);
-  } else if (freteModo === "gratis" || Number(cfg?.taxa_entrega ?? 0) === 0) {
+  } else if (freteModo === "gratis" || (freteModo !== "nuvemshop" && Number(cfg?.taxa_entrega ?? 0) === 0)) {
     blocos.push(`# FRETE
 Frete GRÁTIS pra todo o Brasil (5-10 dias úteis com rastreio). Responda na hora se perguntarem, sem prometer "vou calcular".`);
   } else if (freteModo === "manual") {
