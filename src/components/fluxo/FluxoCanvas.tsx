@@ -282,16 +282,22 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
             sync(nodes.filter(n => !ids.has(n.id)), nextEdges);
           }}
           nodeTypes={nodeTypes}
+          defaultEdgeOptions={defaultEdgeOptions}
           fitView
+          minZoom={0.1}
+          maxZoom={2}
           deleteKeyCode={["Backspace", "Delete"]}
           multiSelectionKeyCode={["Shift"]}
-          selectionOnDrag
-          panOnDrag={[1, 2]}
+          selectionOnDrag={!locked}
+          panOnDrag={locked ? [0, 1, 2] : [1, 2]}
+          nodesDraggable={!locked}
+          nodesConnectable={!locked}
+          elementsSelectable={!locked}
           snapToGrid
           snapGrid={[16, 16]}
         >
           <Background gap={16} />
-          <Controls position="bottom-right" />
+          <Controls position="bottom-right" showInteractive={false} />
           <MiniMap pannable zoomable className="!bg-background" />
         </ReactFlow>
       </div>
