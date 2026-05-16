@@ -55,7 +55,7 @@ function FluxoEditor() {
       // cria versão se não existir
       const { data: nv } = await supabase
         .from("fluxos_versoes")
-        .insert({ fluxo_id: id, versao: f.versao_atual, dados: loadedData })
+        .insert({ fluxo_id: id, versao: f.versao_atual, dados: loadedData as any })
         .select()
         .single();
       setVersao(nv);
