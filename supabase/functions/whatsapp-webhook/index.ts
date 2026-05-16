@@ -472,14 +472,17 @@ Deno.serve(async (req) => {
     ]);
 
     const stevoKey = Deno.env.get("STEVO_API_KEY") ?? "";
-    const sendResp = await fetch(STEVO_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", apikey: stevoKey },
-      body: JSON.stringify({ number: numero, text: reply }),
-    });
-    console.log("[stevo-send]", sendResp.status);
 
-    // === Envia fotos dos produtos mencionados (até 3) ===
+    // === Envia em blocos separados quando houver vários produtos/links ===
+    const blocosEnvio = separarMensagens(reply);
+    let textoEnviadoOk = true;
+    for (const bloco of blocosEnvio) {
+      const resp = await enviarTexto(numero, bloco, stevoKey);
+      console.log("[stevo-send]", resp.status);
+      textoEnviadoOk = textoEnviadoOk && resp.ok;
+    }
+
+    // === Envia fotos dos produtos mencionados (até 3), usando endpoint correto de mídia ===
     const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
     const enviadasSet = new Set(fotosEnviadasAnt);
     const produtosMencionados = produtos.filter((p) =>
@@ -487,10 +490,15 @@ Deno.serve(async (req) => {
     ).slice(0, 3);
     for (const p of produtosMencionados) {
       try {
-        const imgResp = await fetch("https://sm-urso.stevo.chat/send/image", {
+        const imgResp = await fetch("https://sm-urso.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
-          body: JSON.stringify({ number: numero, image: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}` }),
+          body: JSON.stringify({
+            number: numero,
+            type: "image",
+            url: p.url_foto,
+            caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}${p.url_produto ? `\n${p.url_produto}` : ""}`,
+          }),
         });
         console.log("[stevo-img]", p.id, imgResp.status);
         if (imgResp.ok) enviadasSet.add(p.id);
@@ -502,7 +510,7 @@ Deno.serve(async (req) => {
       await supabase.from("conversas").update({ fotos_enviadas: Array.from(enviadasSet) }).eq("id", conversa.id);
     }
 
-    return new Response(JSON.stringify({ ok: true, sent: sendResp.ok, fotos: produtosMencionados.length, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, sent: textoEnviadoOk, blocos: blocosEnvio.length, fotos: produtosMencionados.length, humano: marcarHumano, tipo: tipoConv, temp }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[stevo-webhook] error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
