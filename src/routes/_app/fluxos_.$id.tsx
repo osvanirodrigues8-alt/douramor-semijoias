@@ -152,13 +152,15 @@ function FluxoEditor() {
           currentId={curId}
         />
       </div>
-      <FluxoSimulator
-        open={simOpen}
-        onOpenChange={setSimOpen}
-        nodes={simData.nodes}
-        edges={simData.edges}
-        onHighlight={(ids, cur) => { setExecIds(ids); setCurId(cur); }}
-      />
+      {simOpen && (
+        <FluxoSimulator
+          open={simOpen}
+          onOpenChange={setSimOpen}
+          nodes={simData.nodes}
+          edges={simData.edges}
+          onHighlight={(ids, cur) => { setExecIds(ids); setCurId(cur); }}
+        />
+      )}
     </div>
   );
 }
