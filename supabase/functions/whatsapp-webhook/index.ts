@@ -292,7 +292,7 @@ Deno.serve(async (req) => {
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
-      podeOferecerCupom, descricaoMidia,
+      podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
     });
 
     const messages = [
