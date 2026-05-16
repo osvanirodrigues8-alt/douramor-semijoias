@@ -30,8 +30,9 @@ export function buildSystemPrompt(opts: {
   modoFollowup?: 1 | 2 | 3 | null;
   podeOferecerCupom?: boolean;
   descricaoMidia?: string | null;
+  instrucaoFluxo?: string | null;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo } = opts;
 
   // === Leitura COMPLETA das configurações (cfgAg + cfg legado) ===
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
@@ -380,6 +381,10 @@ Responda considerando a mídia naturalmente — NÃO diga "vi a imagem/áudio qu
 8. FECHAMENTO em etapas — não pule da 1 pra 4.
 9. CUPOM só quando autorizado, UMA vez, com naturalidade.
 10. ESCALAR só quando realmente precisar, com [ESCALAR] no fim.`);
+
+  if (instrucaoFluxo && instrucaoFluxo.trim()) {
+    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (prioridade máxima nesta resposta)\n${instrucaoFluxo.trim()}`);
+  }
 
   return blocos.filter(Boolean).join("\n\n");
 }

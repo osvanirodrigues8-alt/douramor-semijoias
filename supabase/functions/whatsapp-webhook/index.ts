@@ -12,6 +12,7 @@ import {
   descreverImagem,
   extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
+import { executarFluxo } from "../_shared/fluxo-engine.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -178,6 +179,34 @@ Deno.serve(async (req) => {
       await supabase.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
     }
 
+    // === ENGINE DE FLUXO VISUAL — tenta executar fluxo ativo antes da IA livre ===
+    const fluxoVariaveis = ((conversa.contexto as any)?.fluxo?.variaveis ?? {}) as Record<string, any>;
+    const fluxoResult = await executarFluxo({
+      supabase, conversa, cliente, cfg, cfgAg,
+      mensagemUsuario: text, canal: "whatsapp",
+      hist: [], variaveis: fluxoVariaveis, lovableKey: LOVABLE_KEY,
+    });
+    if (fluxoResult.handled) {
+      const replyFluxo = fluxoResult.reply ?? MSG_HUMANO;
+      const update: any = {};
+      if (fluxoResult.escalar) {
+        update.precisa_humano = true;
+        update.motivo_humano = fluxoResult.motivoEscalar ?? "fluxo escalou";
+        update.humano_em = new Date().toISOString();
+      }
+      if (Object.keys(update).length) await supabase.from("conversas").update(update).eq("id", conversa.id);
+      await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: replyFluxo });
+      const sendResp = await fetch(STEVO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: Deno.env.get("STEVO_API_KEY") ?? "" },
+        body: JSON.stringify({ number: numero, text: replyFluxo }),
+      });
+      return new Response(JSON.stringify({ ok: true, fluxo: true, sent: sendResp.ok, escalar: fluxoResult.escalar }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+    // Se fluxo passou para "msg_ia", a instrução fica em variaveis.__ia_instrucao__
+    const instrucaoExtraFluxo: string | undefined = fluxoVariaveis.__ia_instrucao__;
+
+
     // === Busca inteligente de produtos ===
     const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","obrigado","obrigada","oi","ola","olá","reais","preco","preço"]);
     const lowText = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -263,7 +292,7 @@ Deno.serve(async (req) => {
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
-      podeOferecerCupom, descricaoMidia,
+      podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
     });
 
     const messages = [
