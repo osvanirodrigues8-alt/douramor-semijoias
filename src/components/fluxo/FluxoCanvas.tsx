@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
-  type Connection, type Edge, type Node, type ReactFlowInstance,
+  MarkerType,
+  type Connection, type Edge, type Node, type ReactFlowInstance, type DefaultEdgeOptions,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { FluxoNode } from "./FluxoNode";
@@ -15,7 +16,7 @@ import { HistoryStack } from "./utils/historico";
 import { autoLayout } from "./utils/auto-layout";
 import { validarFluxo, variaveisDisponiveis } from "./utils/validacao";
 import { Button } from "@/components/ui/button";
-import { Undo2, Redo2, LayoutGrid, AlertTriangle, Play } from "lucide-react";
+import { Undo2, Redo2, LayoutGrid, AlertTriangle, Play, ZoomIn, ZoomOut, Maximize2, Lock, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const nodeTypes = { fluxo: FluxoNode };
@@ -37,8 +38,16 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const [rf, setRf] = useState<ReactFlowInstance | null>(null);
   const history = useRef(new HistoryStack());
   const skipNextHistory = useRef(false);
-  const { fitView } = useReactFlow();
+  const { fitView, zoomIn, zoomOut } = useReactFlow();
+  const [locked, setLocked] = useState(false);
   const lastEmitted = useRef<string>("");
+
+  const defaultEdgeOptions: DefaultEdgeOptions = {
+    type: "smoothstep",
+    animated: true,
+    style: { strokeWidth: 2, stroke: "hsl(var(--primary))" },
+    markerEnd: { type: MarkerType.ArrowClosed, color: "hsl(var(--primary))", width: 18, height: 18 },
+  };
 
   // init history + baseline serializado (evita onChange por hidratação inicial)
   useEffect(() => {
@@ -66,7 +75,14 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     });
   }, [nodes, problemas, executedIds, currentId]);
 
-  
+  const edgesEstilizadas = useMemo(() => edges.map((e) => ({
+    ...e,
+    type: e.type ?? "smoothstep",
+    animated: e.animated ?? true,
+    style: { strokeWidth: 2, stroke: "hsl(var(--primary))", ...(e.style ?? {}) },
+    markerEnd: e.markerEnd ?? { type: MarkerType.ArrowClosed, color: "hsl(var(--primary))", width: 18, height: 18 },
+  })), [edges]);
+
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
@@ -207,12 +223,25 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
     <div className="flex h-full w-full">
       <NodePalette />
       <div className="flex-1 relative">
-        <div className="absolute top-2 left-2 z-10 flex gap-1 bg-background/80 backdrop-blur rounded-md border p-1 shadow-sm">
+        <div className="absolute top-2 left-2 z-10 flex gap-1 bg-background/90 backdrop-blur rounded-md border p-1 shadow-md">
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doUndo} title="Desfazer (Ctrl+Z)">
             <Undo2 className="size-3.5" />
           </Button>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={doRedo} title="Refazer (Ctrl+Shift+Z)">
             <Redo2 className="size-3.5" />
+          </Button>
+          <div className="w-px bg-border mx-0.5" />
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => zoomIn({ duration: 200 })} title="Zoom in (+)">
+            <ZoomIn className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => zoomOut({ duration: 200 })} title="Zoom out (-)">
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => fitView({ duration: 400, padding: 0.2 })} title="Ajustar à tela">
+            <Maximize2 className="size-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setLocked((v) => !v)} title={locked ? "Destravar" : "Travar canvas"}>
+            {locked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
           </Button>
           <div className="w-px bg-border mx-0.5" />
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={organizar} title="Auto-organizar">
@@ -242,7 +271,7 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
 
         <ReactFlow
           nodes={nodesComProblemas}
-          edges={edges}
+          edges={edgesEstilizadas}
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={onConnect}
@@ -260,16 +289,22 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
             sync(nodes.filter(n => !ids.has(n.id)), nextEdges);
           }}
           nodeTypes={nodeTypes}
+          defaultEdgeOptions={defaultEdgeOptions}
           fitView
+          minZoom={0.1}
+          maxZoom={2}
           deleteKeyCode={["Backspace", "Delete"]}
           multiSelectionKeyCode={["Shift"]}
-          selectionOnDrag
-          panOnDrag={[1, 2]}
+          selectionOnDrag={!locked}
+          panOnDrag={locked ? [0, 1, 2] : [1, 2]}
+          nodesDraggable={!locked}
+          nodesConnectable={!locked}
+          elementsSelectable={!locked}
           snapToGrid
           snapGrid={[16, 16]}
         >
           <Background gap={16} />
-          <Controls position="bottom-right" />
+          <Controls position="bottom-right" showInteractive={false} />
           <MiniMap pannable zoomable className="!bg-background" />
         </ReactFlow>
       </div>
