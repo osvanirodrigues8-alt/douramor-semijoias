@@ -27,8 +27,10 @@ export function buildSystemPrompt(opts: {
   tipoConversa?: TipoConversa;
   temperatura?: Temperatura;
   modoFollowup?: 1 | 2 | 3 | null; // ângulo de follow-up
+  podeOferecerCupom?: boolean; // se já passou pelas tentativas e cliente nunca usou
+  descricaoMidia?: string | null; // descrição de áudio transcrito ou imagem analisada
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? "informal";
@@ -203,8 +205,35 @@ ${(produtos ?? []).map((p) => `- ${p.nome} (${p.categoria}${p.genero ? `, ${p.ge
     blocos.push(`# CUPONS ATIVOS\n${cupons.map((c) => `- ${c.codigo}: ${c.tipo_desconto === "percentual" ? c.valor_desconto + "%" : "R$ " + c.valor_desconto}${c.validade ? ` (até ${c.validade})` : ""}`).join("\n")}`);
   }
 
+  // === CUPOM DE NEGOCIAÇÃO (último recurso) ===
+  const cupomCodigo = cfgAg?.cupom_negociacao_codigo ?? "JULIANA10";
+  const cupomPct = Number(cfgAg?.cupom_negociacao_percentual ?? 10);
+  const cupomAtivo = cfgAg?.cupom_negociacao_ativo !== false;
+  if (cupomAtivo) {
+    if (podeOferecerCupom) {
+      blocos.push(`# CUPOM DE NEGOCIAÇÃO (autorizado AGORA)
+A cliente já recebeu argumentos de valor (qualidade, frete, garantia) e AINDA está hesitando em fechar. Você está autorizada a oferecer UM cupom — agora é a hora.
+Use de forma natural, NUNCA como desespero. Exemplo:
+"Olha, como você já está aqui conversando comigo, deixa eu te dar um presente: usa o cupom *${cupomCodigo}* na hora de fechar e você ganha ${cupomPct}% de desconto 💛 É só inserir no carrinho!"
+Oferece apenas UMA vez nessa conversa. Não fique reforçando.`);
+    } else {
+      blocos.push(`# CUPOM DE NEGOCIAÇÃO (PROIBIDO oferecer agora)
+Existe um cupom secreto (${cupomCodigo}, ${cupomPct}%) que pode ser oferecido em casos raros — mas NÃO AGORA.
+Regras:
+- NUNCA mencione cupom, código ou desconto extra antes de ter tentado vender pelo valor (qualidade, garantia, frete grátis).
+- Se a cliente pedir desconto cedo: contorne com valor — não cite o cupom.
+- Se já foi oferecido nessa cliente antes, NÃO ofereça de novo.`);
+    }
+  }
+
   if (promptExtra) {
     blocos.push(`# INSTRUÇÕES EXTRAS DA LOJA\n${promptExtra}`);
+  }
+
+  if (descricaoMidia) {
+    blocos.push(`# MÍDIA RECEBIDA DA CLIENTE
+${descricaoMidia}
+Responda considerando o conteúdo da mídia naturalmente — não diga "vi a imagem que você mandou" como robô; trate como se tivesse acabado de ver.`);
   }
 
   blocos.push(`# DIRETRIZES FINAIS
@@ -339,4 +368,89 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
   } catch {
     return true;
   }
+}
+
+// ============ Mídia (áudio / imagem) via Lovable AI Gateway ============
+
+const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+
+async function fetchAsBase64(url: string): Promise<{ data: string; mime: string }> {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`mídia ${r.status}`);
+  const mime = r.headers.get("content-type") ?? "application/octet-stream";
+  const buf = new Uint8Array(await r.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return { data: btoa(bin), mime };
+}
+
+export async function transcreverAudio(url: string, apiKey: string): Promise<string | null> {
+  try {
+    const { data, mime } = await fetchAsBase64(url);
+    const r = await fetch(AI_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Transcreva exatamente o que foi falado neste áudio, em pt-BR. Apenas a transcrição, sem comentários." },
+            { type: "input_audio", input_audio: { data, format: mime.includes("ogg") ? "ogg" : mime.includes("mp3") ? "mp3" : "wav" } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) { console.error("transcricao err", r.status, await r.text()); return null; }
+    const j = await r.json();
+    return (j.choices?.[0]?.message?.content ?? "").trim() || null;
+  } catch (e) {
+    console.error("transcreverAudio fail", e);
+    return null;
+  }
+}
+
+export async function descreverImagem(url: string, apiKey: string): Promise<string | null> {
+  try {
+    const r = await fetch(AI_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Descreva esta imagem de joia/semijoia em pt-BR para uma vendedora identificar peças parecidas. Diga: TIPO (brinco/colar/anel/pulseira/etc), COR (dourado/prateado/rose), ESTILO (delicado/clássico/moderno/ousado), DETALHES (pedras, formato, tamanho). Máx 3 frases." },
+            { type: "image_url", image_url: { url } },
+          ],
+        }],
+      }),
+    });
+    if (!r.ok) { console.error("desc img err", r.status, await r.text()); return null; }
+    const j = await r.json();
+    return (j.choices?.[0]?.message?.content ?? "").trim() || null;
+  } catch (e) {
+    console.error("descreverImagem fail", e);
+    return null;
+  }
+}
+
+// Extrai palavras-chave (tipo/cor/estilo) de uma descrição de imagem
+export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; categoria: string | null } {
+  const t = desc.toLowerCase();
+  const kw = new Set<string>();
+  const cats: Array<[RegExp, string]> = [
+    [/brinco|argola|ear/, "brinco"],
+    [/colar|corrente|gargantilha|cord[aã]o/, "colar"],
+    [/anel|alian[çc]a/, "anel"],
+    [/pulseira|bracelete/, "pulseira"],
+    [/conjunto|kit/, "conjunto"],
+    [/piercing/, "piercing"],
+  ];
+  let cat: string | null = null;
+  for (const [re, c] of cats) if (re.test(t)) { kw.add(c); cat = cat ?? c; }
+  for (const w of ["dourado", "prateado", "rose", "delicado", "moderno", "clássico", "classico", "pedra", "zircônia", "zirconia", "pérola", "perola"]) {
+    if (t.includes(w)) kw.add(w.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  }
+  return { keywords: Array.from(kw), categoria: cat };
 }

@@ -108,6 +108,8 @@ export type Database = {
           categoria_favorita: string | null
           contato: string
           criado_em: string
+          cupom_negociacao_oferecido_em: string | null
+          cupom_negociacao_usado: boolean
           data_aniversario: string | null
           data_ultimo_contato: string | null
           estilo_preferido: string | null
@@ -130,6 +132,8 @@ export type Database = {
           categoria_favorita?: string | null
           contato: string
           criado_em?: string
+          cupom_negociacao_oferecido_em?: string | null
+          cupom_negociacao_usado?: boolean
           data_aniversario?: string | null
           data_ultimo_contato?: string | null
           estilo_preferido?: string | null
@@ -152,6 +156,8 @@ export type Database = {
           categoria_favorita?: string | null
           contato?: string
           criado_em?: string
+          cupom_negociacao_oferecido_em?: string | null
+          cupom_negociacao_usado?: boolean
           data_aniversario?: string | null
           data_ultimo_contato?: string | null
           estilo_preferido?: string | null
@@ -317,6 +323,11 @@ export type Database = {
           auto_reativacao_ativa: boolean
           contexto_loja: string | null
           criado_em: string
+          cupom_negociacao_ativo: boolean
+          cupom_negociacao_codigo: string | null
+          cupom_negociacao_percentual: number | null
+          cupom_permite_reuso: boolean
+          cupom_tentativas_antes: number
           dias_avaliacao: number
           dias_reativacao: number
           dias_total: number
@@ -353,6 +364,11 @@ export type Database = {
           auto_reativacao_ativa?: boolean
           contexto_loja?: string | null
           criado_em?: string
+          cupom_negociacao_ativo?: boolean
+          cupom_negociacao_codigo?: string | null
+          cupom_negociacao_percentual?: number | null
+          cupom_permite_reuso?: boolean
+          cupom_tentativas_antes?: number
           dias_avaliacao?: number
           dias_reativacao?: number
           dias_total?: number
@@ -389,6 +405,11 @@ export type Database = {
           auto_reativacao_ativa?: boolean
           contexto_loja?: string | null
           criado_em?: string
+          cupom_negociacao_ativo?: boolean
+          cupom_negociacao_codigo?: string | null
+          cupom_negociacao_percentual?: number | null
+          cupom_permite_reuso?: boolean
+          cupom_tentativas_antes?: number
           dias_avaliacao?: number
           dias_reativacao?: number
           dias_total?: number
@@ -662,6 +683,9 @@ export type Database = {
           conversa_id: string
           criado_em: string
           id: string
+          midia_tipo: string | null
+          midia_transcricao: string | null
+          midia_url: string | null
           papel: string
         }
         Insert: {
@@ -669,6 +693,9 @@ export type Database = {
           conversa_id: string
           criado_em?: string
           id?: string
+          midia_tipo?: string | null
+          midia_transcricao?: string | null
+          midia_url?: string | null
           papel: string
         }
         Update: {
@@ -676,6 +703,9 @@ export type Database = {
           conversa_id?: string
           criado_em?: string
           id?: string
+          midia_tipo?: string | null
+          midia_transcricao?: string | null
+          midia_url?: string | null
           papel?: string
         }
         Relationships: [
@@ -698,6 +728,9 @@ export type Database = {
           nome_loja: string | null
           scope: string | null
           store_id: string
+          ultimo_webhook_em: string | null
+          ultimo_webhook_evento: string | null
+          ultimo_webhook_status: string | null
         }
         Insert: {
           access_token: string
@@ -708,6 +741,9 @@ export type Database = {
           nome_loja?: string | null
           scope?: string | null
           store_id: string
+          ultimo_webhook_em?: string | null
+          ultimo_webhook_evento?: string | null
+          ultimo_webhook_status?: string | null
         }
         Update: {
           access_token?: string
@@ -718,6 +754,9 @@ export type Database = {
           nome_loja?: string | null
           scope?: string | null
           store_id?: string
+          ultimo_webhook_em?: string | null
+          ultimo_webhook_evento?: string | null
+          ultimo_webhook_status?: string | null
         }
         Relationships: []
       }

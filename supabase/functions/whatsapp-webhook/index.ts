@@ -8,6 +8,9 @@ import {
   detectarIntencaoCompra,
   detectarTipoConversa,
   detectarTemperatura,
+  transcreverAudio,
+  descreverImagem,
+  extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
 
 const cors = {
@@ -18,6 +21,8 @@ const cors = {
 
 const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
 const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar pessoalmente 🙏";
+
+const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -33,8 +38,36 @@ Deno.serve(async (req) => {
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
     const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
-    const text: string | undefined =
+    let text: string | undefined =
       message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
+
+    // === Mídia: áudio / imagem ===
+    const audioUrl: string | undefined =
+      message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
+    const imageUrl: string | undefined =
+      message?.imageMessage?.url ?? data?.imageMessage?.url ?? data?.image?.url ?? data?.mediaUrl?.image;
+    const legendaImg: string | undefined =
+      message?.imageMessage?.caption ?? data?.imageMessage?.caption ?? data?.caption;
+
+    let midiaTipo: "audio" | "image" | null = null;
+    let midiaUrl: string | null = null;
+    let midiaTranscricao: string | null = null;
+    let descricaoMidia: string | null = null;
+
+    const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+
+    if (!text && audioUrl) {
+      midiaTipo = "audio"; midiaUrl = audioUrl;
+      const tr = await transcreverAudio(audioUrl, LOVABLE_KEY);
+      if (tr) { text = tr; midiaTranscricao = tr; }
+    }
+    if (!text && imageUrl) {
+      midiaTipo = "image"; midiaUrl = imageUrl;
+      const desc = await descreverImagem(imageUrl, LOVABLE_KEY);
+      midiaTranscricao = desc;
+      descricaoMidia = desc;
+      text = legendaImg || `[imagem: ${desc ?? "joia"}]`;
+    }
 
     if (!remoteJid) {
       return new Response(JSON.stringify({ ok: true, ignored: "no jid" }), { headers: { ...cors, "Content-Type": "application/json" } });
@@ -63,6 +96,15 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    // Áudio que falhou em transcrever
+    if (!text && midiaTipo === "audio") {
+      await fetch(STEVO_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: Deno.env.get("STEVO_API_KEY") ?? "" },
+        body: JSON.stringify({ number: numero, text: MSG_AUDIO_FAIL }),
+      });
+      return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
     if (!text) {
       return new Response(JSON.stringify({ ok: true, ignored: "sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
@@ -95,7 +137,10 @@ Deno.serve(async (req) => {
       conversa = nova!;
     }
 
-    await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text });
+    await supabase.from("mensagens").insert({
+      conversa_id: conversa.id, papel: "user", conteudo: text,
+      midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao,
+    });
 
     // Cliente respondeu → reset cadência follow-up + atualiza data_ultimo_contato
     await supabase.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
@@ -141,6 +186,11 @@ Deno.serve(async (req) => {
       /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
 
     const baseKeywords = (lowText.match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !stop.has(w)).slice(0, 8);
+    // Se veio imagem, mistura keywords da descrição
+    if (descricaoMidia) {
+      const ex = extrairKeywordsDeDescricao(descricaoMidia);
+      for (const k of ex.keywords) baseKeywords.push(k);
+    }
     const keywords = expandirComSinonimos(baseKeywords);
     const { max: precoMax, baratoPrimeiro } = detectarFaixaPreco(text);
 
@@ -194,9 +244,26 @@ Deno.serve(async (req) => {
     }
     const temp = detectarTemperatura(hist ?? []);
 
+    // === Cupom de negociação: pode oferecer? ===
+    const cupomCfgAtivo = cfgAg?.cupom_negociacao_ativo !== false;
+    const cupomReuso = cfgAg?.cupom_permite_reuso === true;
+    const cupomTentMin = Number(cfgAg?.cupom_tentativas_antes ?? 1);
+    const userMsgs = (hist ?? []).filter((m: any) => m.papel === "user").length;
+    const assistantMsgs = (hist ?? []).filter((m: any) => m.papel === "assistant").length;
+    const objecaoPreco = /\b(caro|car[ií]ssim|or[çc]ament|n[aã]o\s+posso|sem\s+grana|desconto|abaix|baix|melhor\s+pre[çc]o)\b/i.test(text);
+    const jaUsouCupom = cliente?.cupom_negociacao_usado === true;
+    const jaOferecido = !!cliente?.cupom_negociacao_oferecido_em;
+    const podeOferecerCupom = cupomCfgAtivo
+      && objecaoPreco
+      && userMsgs >= 2
+      && assistantMsgs >= cupomTentMin
+      && (!jaOferecido || cupomReuso)
+      && (!jaUsouCupom || cupomReuso);
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
+      podeOferecerCupom, descricaoMidia,
     });
 
     const messages = [
@@ -262,6 +329,8 @@ Deno.serve(async (req) => {
         produtos_vistos: Array.from(novosVistosIds),
         produtos_interesse: Array.from(novosInteresseIds),
         temperatura_lead: temp,
+        ...(podeOferecerCupom && new RegExp(`\\b${(cfgAg?.cupom_negociacao_codigo ?? "JULIANA10")}\\b`, "i").test(reply)
+          ? { cupom_negociacao_oferecido_em: new Date().toISOString() } : {}),
       }).eq("id", cliente.id),
       supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }),
     ]);
