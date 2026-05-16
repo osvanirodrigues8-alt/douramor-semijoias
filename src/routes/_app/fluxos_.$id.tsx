@@ -28,10 +28,11 @@ function FluxoEditor() {
   const [fluxo, setFluxo] = useState<any>(null);
   const [versao, setVersao] = useState<any>(null);
   const [initialData, setInitialData] = useState<FluxoData | null>(null);
-  const [data, setData] = useState<FluxoData>({ nodes: [], edges: [] });
+  const pendingCanvasData = useRef<FluxoData>({ nodes: [], edges: [] });
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [simOpen, setSimOpen] = useState(false);
+  const [simData, setSimData] = useState<FluxoData>({ nodes: [], edges: [] });
   const [execIds, setExecIds] = useState<string[]>([]);
   const [curId, setCurId] = useState<string | null>(null);
 
