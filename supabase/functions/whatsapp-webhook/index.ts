@@ -186,6 +186,11 @@ Deno.serve(async (req) => {
       /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
 
     const baseKeywords = (lowText.match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !stop.has(w)).slice(0, 8);
+    // Se veio imagem, mistura keywords da descrição
+    if (descricaoMidia) {
+      const ex = extrairKeywordsDeDescricao(descricaoMidia);
+      for (const k of ex.keywords) baseKeywords.push(k);
+    }
     const keywords = expandirComSinonimos(baseKeywords);
     const { max: precoMax, baratoPrimeiro } = detectarFaixaPreco(text);
 
