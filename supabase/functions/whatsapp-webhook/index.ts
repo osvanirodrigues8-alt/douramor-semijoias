@@ -13,6 +13,7 @@ import {
   extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
 import { executarFluxo } from "../_shared/fluxo-engine.ts";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "../_shared/frete.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
