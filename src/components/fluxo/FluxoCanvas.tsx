@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, useNodesState, useEdgesState, useReactFlow,
-  type Connection, type Edge, type Node, type ReactFlowInstance,
+  MarkerType,
+  type Connection, type Edge, type Node, type ReactFlowInstance, type DefaultEdgeOptions,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { FluxoNode } from "./FluxoNode";
@@ -15,7 +16,7 @@ import { HistoryStack } from "./utils/historico";
 import { autoLayout } from "./utils/auto-layout";
 import { validarFluxo, variaveisDisponiveis } from "./utils/validacao";
 import { Button } from "@/components/ui/button";
-import { Undo2, Redo2, LayoutGrid, AlertTriangle, Play } from "lucide-react";
+import { Undo2, Redo2, LayoutGrid, AlertTriangle, Play, ZoomIn, ZoomOut, Maximize2, Lock, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const nodeTypes = { fluxo: FluxoNode };
