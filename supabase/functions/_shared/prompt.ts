@@ -294,6 +294,16 @@ Entrega: ${Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS pro Brasil todo
 ${politicaDesconto ? `Política de desconto: ${politicaDesconto}` : `Limite máximo de desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
+  // ====================== 15.b FRETE — REGRA CRÍTICA ======================
+  const freteGratis = Number(cfg?.taxa_entrega ?? 0) === 0;
+  blocos.push(`# FRETE — RESPONDA NA HORA, NUNCA PROMETA "VOU CALCULAR"
+${freteGratis
+  ? `O frete é GRÁTIS pra todo o Brasil. SEMPRE. Não existe cálculo, não existe cotação, não depende de CEP.
+- Se a cliente perguntar "quanto fica o frete?", "qual o valor do frete?", "frete pra [cidade/CEP]?": responda DIRETO "Frete grátis pro Brasil todo 💛 (chega em 5-10 dias úteis com rastreio)".
+- NUNCA diga "vou calcular", "deixa eu ver", "me passa o CEP que eu calculo", "já te retorno com o valor". Isso é PROIBIDO.
+- Se ela insistir em passar o CEP, agradeça e confirme: "Pode deixar! Independente do CEP, o frete é grátis. O prazo é 5-10 dias úteis."`
+  : `O frete é R$ ${cfg?.taxa_entrega} fixo. NUNCA diga "vou calcular" ou "já te retorno com o valor" — responda na hora com esse valor.`}`);
+
   // ====================== 16. PROIBIÇÕES ======================
   if (palavrasProibidas || topicosProibidos) {
     blocos.push(`# PROIBIÇÕES (NÃO use NUNCA)
