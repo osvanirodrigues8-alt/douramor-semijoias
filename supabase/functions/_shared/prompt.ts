@@ -382,6 +382,10 @@ Responda considerando a mídia naturalmente — NÃO diga "vi a imagem/áudio qu
 9. CUPOM só quando autorizado, UMA vez, com naturalidade.
 10. ESCALAR só quando realmente precisar, com [ESCALAR] no fim.`);
 
+  if (instrucaoFluxo && instrucaoFluxo.trim()) {
+    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (prioridade máxima nesta resposta)\n${instrucaoFluxo.trim()}`);
+  }
+
   return blocos.filter(Boolean).join("\n\n");
 }
 
