@@ -47,8 +47,17 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const variaveis = useMemo(() => variaveisDisponiveis(nodes), [nodes]);
   const nodesComProblemas = useMemo(() => {
     const map = new Map(problemas.map((p) => [p.nodeId, p]));
-    return nodes.map((n) => ({ ...n, data: { ...n.data, __problema: map.get(n.id) } }));
-  }, [nodes, problemas]);
+    const exec = new Set(executedIds ?? []);
+    return nodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        __problema: map.get(n.id),
+        __visitado: exec.has(n.id),
+        __executando: currentId === n.id,
+      },
+    }));
+  }, [nodes, problemas, executedIds, currentId]);
 
   const pushHistory = useCallback((ns: Node[], es: Edge[]) => {
     if (skipNextHistory.current) { skipNextHistory.current = false; return; }
