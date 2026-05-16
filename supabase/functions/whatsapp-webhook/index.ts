@@ -91,9 +91,26 @@ Deno.serve(async (req) => {
         const { data: nova } = await supabase.from("conversas").insert({ sessao_token, canal: "whatsapp", cliente_id: cliId, tipo_conversa: "receptivo" }).select("id, cliente_id").single();
         conv = nova!;
       }
+
+      const { data: ultimaAssistente } = await supabase
+        .from("mensagens")
+        .select("conteudo")
+        .eq("conversa_id", conv.id)
+        .eq("papel", "assistant")
+        .order("criado_em", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (String(ultimaAssistente?.conteudo ?? "").trim() === text.trim()) {
+        return new Response(JSON.stringify({ ok: true, ignored: "eco da mensagem enviada pelo sistema" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+
       await supabase.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: text });
-      // Pausa IA: humano está atendendo
-      await supabase.from("conversas").update({ precisa_humano: false }).eq("id", conv.id);
+      // Pausa IA: humano está atendendo manualmente
+      await supabase.from("conversas").update({
+        precisa_humano: true,
+        motivo_humano: "Atendimento humano manual",
+        humano_em: new Date().toISOString(),
+      }).eq("id", conv.id);
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
@@ -222,6 +239,8 @@ Deno.serve(async (req) => {
     }
     const keywords = expandirComSinonimos(baseKeywords);
     const { max: precoMax, baratoPrimeiro } = detectarFaixaPreco(text);
+    const buscaProdutoSolicitada = intencaoCompra || !!precoMax || descricaoMidia != null ||
+      /\b(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|tornozeleira|piercing|joia|semi\s*joia|semijoia|presente|cat[aá]logo|modelo|op[cç][aã]o|op[cç][oõ]es|mostra|mostrar|ver\s+mais|dourad|prat|rose|masculin|feminin)\b/i.test(lowText);
 
     const { data: pedidosRecentes } = await supabase.from("pedidos").select("produtos_ids").order("criado_em", { ascending: false }).limit(200);
     const contagemVendas = new Map<string, number>();
@@ -337,8 +356,12 @@ Deno.serve(async (req) => {
     }
     const adicionouAlgum = novosMostrados.size > jaMostrados.length;
     const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? 2);
-    const novaTentativaSemResultado = adicionouAlgum ? 0 : (conversa.tentativas_sem_resultado ?? 0) + 1;
-    if (!adicionouAlgum && novaTentativaSemResultado >= tentativasMax) {
+    const novaTentativaSemResultado = adicionouAlgum
+      ? 0
+      : buscaProdutoSolicitada
+        ? (conversa.tentativas_sem_resultado ?? 0) + 1
+        : 0;
+    if (buscaProdutoSolicitada && !adicionouAlgum && novaTentativaSemResultado >= tentativasMax) {
       marcarHumano = true;
       motivoEscalar = motivoEscalar ?? "Juliana não encontrou produto adequado";
       reply = MSG_HUMANO;
