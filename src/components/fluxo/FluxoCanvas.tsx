@@ -39,8 +39,12 @@ function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: 
   const skipNextHistory = useRef(false);
   const { fitView } = useReactFlow();
 
-  // init history once
-  useEffect(() => { history.current.init({ nodes: initial.nodes, edges: initial.edges }); /* eslint-disable-next-line */ }, []);
+  // init history + baseline serializado (evita onChange por hidratação inicial)
+  useEffect(() => {
+    history.current.init({ nodes: initial.nodes, edges: initial.edges });
+    lastEmitted.current = JSON.stringify({ nodes: initial.nodes, edges: initial.edges });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // validação + variáveis disponíveis
   const problemas = useMemo(() => validarFluxo(nodes, edges), [nodes, edges]);
