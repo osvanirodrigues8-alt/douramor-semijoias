@@ -244,9 +244,26 @@ Deno.serve(async (req) => {
     }
     const temp = detectarTemperatura(hist ?? []);
 
+    // === Cupom de negociação: pode oferecer? ===
+    const cupomCfgAtivo = cfgAg?.cupom_negociacao_ativo !== false;
+    const cupomReuso = cfgAg?.cupom_permite_reuso === true;
+    const cupomTentMin = Number(cfgAg?.cupom_tentativas_antes ?? 1);
+    const userMsgs = (hist ?? []).filter((m: any) => m.papel === "user").length;
+    const assistantMsgs = (hist ?? []).filter((m: any) => m.papel === "assistant").length;
+    const objecaoPreco = /\b(caro|car[ií]ssim|or[çc]ament|n[aã]o\s+posso|sem\s+grana|desconto|abaix|baix|melhor\s+pre[çc]o)\b/i.test(text);
+    const jaUsouCupom = cliente?.cupom_negociacao_usado === true;
+    const jaOferecido = !!cliente?.cupom_negociacao_oferecido_em;
+    const podeOferecerCupom = cupomCfgAtivo
+      && objecaoPreco
+      && userMsgs >= 2
+      && assistantMsgs >= cupomTentMin
+      && (!jaOferecido || cupomReuso)
+      && (!jaUsouCupom || cupomReuso);
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
+      podeOferecerCupom, descricaoMidia,
     });
 
     const messages = [
