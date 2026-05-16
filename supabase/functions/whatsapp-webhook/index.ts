@@ -12,6 +12,7 @@ import {
   descreverImagem,
   extrairKeywordsDeDescricao,
 } from "../_shared/prompt.ts";
+import { executarFluxo } from "../_shared/fluxo-engine.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
