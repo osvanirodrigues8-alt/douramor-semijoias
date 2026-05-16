@@ -12,11 +12,22 @@ import { FluxoSimulator } from "@/components/fluxo/FluxoSimulator";
 
 export const Route = createFileRoute("/_app/fluxos_/$id")({ component: FluxoEditor });
 
+const emptyFluxoData = (): FluxoData => ({ nodes: [], edges: [] });
+
+const normalizeFluxoData = (value: unknown): FluxoData => {
+  const parsed = value as Partial<FluxoData> | null | undefined;
+  return {
+    nodes: Array.isArray(parsed?.nodes) ? parsed.nodes : [],
+    edges: Array.isArray(parsed?.edges) ? parsed.edges : [],
+  };
+};
+
 function FluxoEditor() {
   const { id } = Route.useParams();
   const nav = useNavigate();
   const [fluxo, setFluxo] = useState<any>(null);
   const [versao, setVersao] = useState<any>(null);
+  const [initialData, setInitialData] = useState<FluxoData | null>(null);
   const [data, setData] = useState<FluxoData>({ nodes: [], edges: [] });
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -35,16 +46,21 @@ function FluxoEditor() {
       .eq("versao", f.versao_atual)
       .maybeSingle();
     if (v) {
+      const loadedData = normalizeFluxoData(v.dados);
       setVersao(v);
-      setData((v.dados as unknown as FluxoData) ?? { nodes: [], edges: [] });
+      setInitialData(loadedData);
+      setData(loadedData);
     } else {
+      const loadedData = emptyFluxoData();
       // cria versão se não existir
       const { data: nv } = await supabase
         .from("fluxos_versoes")
-        .insert({ fluxo_id: id, versao: f.versao_atual, dados: { nodes: [], edges: [] } })
+        .insert({ fluxo_id: id, versao: f.versao_atual, dados: loadedData as any })
         .select()
         .single();
       setVersao(nv);
+      setInitialData(loadedData);
+      setData(loadedData);
     }
   }, [id, nav]);
 
@@ -84,7 +100,7 @@ function FluxoEditor() {
     setFluxo({ ...fluxo, ativo: true });
   };
 
-  if (!fluxo || !versao) {
+  if (!fluxo || !versao || !initialData) {
     return <div className="h-screen grid place-items-center"><Loader2 className="size-5 animate-spin" /></div>;
   }
 
@@ -128,7 +144,7 @@ function FluxoEditor() {
       <div className="flex-1 min-h-0">
         <FluxoCanvas
           key={versao.id}
-          initial={data}
+          initial={initialData}
           onChange={handleChange}
           onSimulate={() => setSimOpen(true)}
           executedIds={execIds}
