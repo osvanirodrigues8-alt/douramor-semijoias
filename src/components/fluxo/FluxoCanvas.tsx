@@ -26,9 +26,11 @@ type Props = {
   initial: FluxoData;
   onChange: (data: FluxoData) => void;
   onSimulate?: () => void;
+  executedIds?: string[];
+  currentId?: string | null;
 };
 
-function CanvasInner({ initial, onChange, onSimulate }: Props) {
+function CanvasInner({ initial, onChange, onSimulate, executedIds, currentId }: Props) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
