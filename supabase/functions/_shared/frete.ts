@@ -121,7 +121,8 @@ export async function calcularFreteNuvemshop(params: {
     });
     const storefrontTxt = await storefrontRes.text();
     if (storefrontRes.ok) {
-      const payload = JSON.parse(storefrontTxt);
+      let payload: any = null;
+      try { payload = JSON.parse(storefrontTxt); } catch { payload = null; }
       if (payload?.success && payload?.html) {
         const opcoesStorefront = parseOpcoesDoHtml(String(payload.html));
         if (opcoesStorefront.length) {
