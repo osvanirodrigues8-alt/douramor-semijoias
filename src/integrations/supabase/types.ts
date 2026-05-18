@@ -911,6 +911,7 @@ export type Database = {
           id: string
           motivo_cancelamento: string | null
           numero: number
+          nuvemshop_order_id: string | null
           parcelas: number | null
           pos_venda_enviado_em: string | null
           produtos_ids: string[]
@@ -936,6 +937,7 @@ export type Database = {
           id?: string
           motivo_cancelamento?: string | null
           numero?: number
+          nuvemshop_order_id?: string | null
           parcelas?: number | null
           pos_venda_enviado_em?: string | null
           produtos_ids?: string[]
@@ -961,6 +963,7 @@ export type Database = {
           id?: string
           motivo_cancelamento?: string | null
           numero?: number
+          nuvemshop_order_id?: string | null
           parcelas?: number | null
           pos_venda_enviado_em?: string | null
           produtos_ids?: string[]
@@ -1137,7 +1140,7 @@ export type Database = {
       agendamento_status: "pendente" | "confirmado" | "cancelado"
       agendamento_tipo: "visita" | "retirada"
       app_role: "admin" | "atendente"
-      canal: "whatsapp" | "instagram" | "site"
+      canal: "whatsapp" | "instagram" | "site" | "outro"
       cupom_tipo: "percentual" | "valor_fixo"
       entrega_tipo: "retirada" | "entrega"
       fluxo_canal: "site" | "whatsapp" | "instagram" | "todos"
@@ -1301,7 +1304,7 @@ export const Constants = {
       agendamento_status: ["pendente", "confirmado", "cancelado"],
       agendamento_tipo: ["visita", "retirada"],
       app_role: ["admin", "atendente"],
-      canal: ["whatsapp", "instagram", "site"],
+      canal: ["whatsapp", "instagram", "site", "outro"],
       cupom_tipo: ["percentual", "valor_fixo"],
       entrega_tipo: ["retirada", "entrega"],
       fluxo_canal: ["site", "whatsapp", "instagram", "todos"],
