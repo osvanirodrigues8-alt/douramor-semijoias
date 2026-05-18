@@ -19,13 +19,18 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     // Load configuracoes
-    const { data: cfg } = await supabase.from("configuracoes").select("*").limit(1).maybeSingle();
+    const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
+      supabase.from("configuracoes").select("*").limit(1).maybeSingle(),
+      supabase.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
+    ]);
     if (!cfg) throw new Error("Configurações não encontradas");
 
     // Load catálogo (resumo)
-    const { data: produtos } = await supabase.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40);
-    const { data: cupons } = await supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true);
-    const { data: faqs } = await supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true });
+    const [{ data: produtos }, { data: cupons }, { data: faqs }] = await Promise.all([
+      supabase.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40),
+      supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
+      supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
+    ]);
 
     // Find or create cliente by contato (optional)
     let cliente_id: string | null = null;
@@ -53,7 +58,7 @@ Deno.serve(async (req) => {
     // Load history
     const { data: hist } = await supabase.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
 
-    const systemPrompt = buildSystemPrompt({ cfg, produtos: produtos ?? [], cupons: cupons ?? [], faqs: faqs ?? [], canal: canal === "whatsapp" ? "whatsapp" : "site" });
+    const systemPrompt = buildSystemPrompt({ cfg, cfgAg, produtos: produtos ?? [], cupons: cupons ?? [], faqs: faqs ?? [], canal: canal === "whatsapp" ? "whatsapp" : "site" });
 
     const messages = [
       { role: "system", content: systemPrompt },

@@ -117,7 +117,12 @@ async function run() {
 export const Route = createFileRoute("/api/public/pos-venda-cron")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }: { request: Request }) => {
+        const secret = process.env.CRON_SECRET;
+        if (secret) {
+          const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
+          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+        }
         try {
           const result = await run();
           console.log("[pos-venda-cron]", JSON.stringify(result).slice(0, 1000));
@@ -127,7 +132,12 @@ export const Route = createFileRoute("/api/public/pos-venda-cron")({
           return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { "Content-Type": "application/json" } });
         }
       },
-      GET: async () => {
+      GET: async ({ request }: { request: Request }) => {
+        const secret = process.env.CRON_SECRET;
+        if (secret) {
+          const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
+          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+        }
         const result = await run();
         return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
       },

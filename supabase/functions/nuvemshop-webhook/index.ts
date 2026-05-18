@@ -106,8 +106,8 @@ async function syncPedido(supabase: any, storeId: string, token: string, orderId
   const statusMap: Record<string, string> = {
     open: "novo",
     pending: "novo",
-    paid: "pago",
-    authorized: "pago",
+    paid: "confirmado",
+    authorized: "confirmado",
     cancelled: "cancelado",
     closed: "entregue",
     shipped: "enviado",
@@ -115,6 +115,7 @@ async function syncPedido(supabase: any, storeId: string, token: string, orderId
   const status = statusMap[o.status] ?? statusMap[o.payment_status] ?? "novo";
 
   const row: any = {
+    nuvemshop_order_id: String(orderId),
     cliente_id: cliId,
     canal: "outro",
     produtos_ids: ids,
@@ -126,13 +127,9 @@ async function syncPedido(supabase: any, storeId: string, token: string, orderId
     atualizado_em: new Date().toISOString(),
   };
 
-  // Não existe campo external_id em pedidos — uso cupom_usado para marcar id externo? Não. Faço dedup por endereço+valor+cliente recente.
   const { data: existing } = await supabase.from("pedidos")
     .select("id")
-    .eq("cliente_id", cliId ?? "00000000-0000-0000-0000-000000000000")
-    .eq("valor_total", row.valor_total)
-    .order("criado_em", { ascending: false })
-    .limit(1)
+    .eq("nuvemshop_order_id", String(orderId))
     .maybeSingle();
 
   if (existing?.id) {
@@ -142,8 +139,8 @@ async function syncPedido(supabase: any, storeId: string, token: string, orderId
   }
 
   if (cliId) {
-    const { data: stats } = await supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("cliente_id", cliId);
-    await supabase.from("clientes").update({ total_pedidos: (stats as any)?.count ?? undefined, temperatura_lead: "quente" }).eq("id", cliId);
+    const { count } = await supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("cliente_id", cliId);
+    await supabase.from("clientes").update({ total_pedidos: count ?? undefined, temperatura_lead: "quente" }).eq("id", cliId);
   }
 }
 

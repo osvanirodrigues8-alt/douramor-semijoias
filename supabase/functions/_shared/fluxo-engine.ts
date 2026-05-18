@@ -235,7 +235,7 @@ async function executarNo(
     case "verificar_horario": {
       const ini = String(ctx.cfg?.horario_atendimento_inicio ?? "09:00").slice(0, 5);
       const fim = String(ctx.cfg?.horario_atendimento_fim ?? "18:00").slice(0, 5);
-      const now = new Date().toTimeString().slice(0, 5);
+      const now = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false });
       const ok = now >= ini && now <= fim;
       return { proxId: nextNodeFrom(data.edges, node.id, ok ? "sim" : "nao") };
     }
@@ -403,9 +403,13 @@ async function executarNo(
       if (!cod) return { proxId: nextNodeFrom(data.edges, node.id, "invalido") };
       const { data: c } = await ctx.supabase.from("cupons").select("*").eq("codigo", cod).eq("ativo", true).maybeSingle();
       if (!c) return { proxId: nextNodeFrom(data.edges, node.id, "invalido") };
+      if (c.limite_usos != null && (c.usos_realizados ?? 0) >= c.limite_usos) {
+        return { proxId: nextNodeFrom(data.edges, node.id, "invalido") };
+      }
       ctx.variaveis.cupom_codigo = c.codigo;
       ctx.variaveis.cupom_desconto = c.valor_desconto;
       ctx.variaveis.cupom_tipo = c.tipo_desconto;
+      await ctx.supabase.from("cupons").update({ usos_realizados: (c.usos_realizados ?? 0) + 1 }).eq("id", c.id);
       return { proxId: nextNodeFrom(data.edges, node.id, "valido") };
     }
     case "calcular_frete": {
@@ -521,6 +525,13 @@ async function processarAguardando(ctx: Ctx, varName: string) {
     const campo = varName.replace("__cliente_", "").replace("__", "");
     await ctx.supabase.from("clientes").update({ [campo]: msg }).eq("id", ctx.cliente.id);
     ctx.cliente[campo] = msg;
+    if (campo === "email") {
+      ctx.variaveis.__campo_valido__ = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg);
+    } else if (campo === "telefone" || campo === "fone" || campo === "phone") {
+      ctx.variaveis.__campo_valido__ = msg.replace(/\D/g, "").length >= 10;
+    } else {
+      ctx.variaveis.__campo_valido__ = msg.trim().length > 0;
+    }
   } else if (varName === "__cep__") {
     const cep = msg.replace(/\D/g, "");
     if (cep.length === 8) {
@@ -549,12 +560,17 @@ async function processarAguardando(ctx: Ctx, varName: string) {
   }
 }
 
-function proxAposAguardo(data: FluxoData, nodeId: string, varName: string): string | null {
+function proxAposAguardo(data: FluxoData, nodeId: string, varName: string, ctx: Ctx): string | null {
   // Para nós com múltiplas saídas que dependem do que foi capturado
   const node = data.nodes.find((n) => n.id === nodeId);
   const tipo = node?.data?.tipo;
   if (tipo === "capturar_cep") {
-    return nextNodeFrom(data.edges, nodeId, varName === "__cep__" ? "out" : "out");
+    const cepValido = ctx.variaveis.__cep_valido__ === true;
+    return nextNodeFrom(data.edges, nodeId, cepValido ? "out" : "invalido");
+  }
+  if (tipo === "capturar_dados") {
+    const valido = ctx.variaveis.__campo_valido__ !== false;
+    return nextNodeFrom(data.edges, nodeId, valido ? "out" : "invalido");
   }
   if (tipo === "msg_botoes") {
     const n = Number(String(varName).replace(/\D/g, "")) || 0;
@@ -590,7 +606,7 @@ export async function executarFluxo(ctx: Ctx): Promise<FluxoResult> {
   if (atualId && aguardando) {
     const varName = aguardando.variavel ?? "resposta";
     await processarAguardando(ctx, varName);
-    atualId = proxAposAguardo(data, atualId, varName);
+    atualId = proxAposAguardo(data, atualId, varName, ctx);
   } else if (!atualId) {
     const inicial = escolherNoInicial(data, ctx);
     if (!inicial) return { handled: false };

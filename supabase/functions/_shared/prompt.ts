@@ -45,6 +45,7 @@ export function buildSystemPrompt(opts: {
   const assinatura = cfgAg?.assinatura ?? cfg?.assinatura ?? "";
   const fraseAbertura = cfgAg?.frase_abertura ?? cfg?.saudacao_whatsapp ?? cfg?.mensagem_boas_vindas ?? "";
   const freteModoCfg = cfgAg?.frete_modo ?? "nuvemshop";
+  const freteModo = freteModoCfg;
   const contextoLojaRaw = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
   const contextoLoja = freteModoCfg === "nuvemshop"
     ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
@@ -304,7 +305,6 @@ ${politicaDesconto ? `Política de desconto: ${politicaDesconto}` : `Limite máx
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
   // ====================== 15.b FRETE ======================
-  const freteModo = freteModoCfg;
   if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
     const linhas = cotacaoFrete.opcoes.map((o) => {
       const v = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;

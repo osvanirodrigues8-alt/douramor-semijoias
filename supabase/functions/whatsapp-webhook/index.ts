@@ -57,6 +57,13 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
+  const webhookSecret = Deno.env.get("WHATSAPP_WEBHOOK_SECRET");
+  if (webhookSecret) {
+    const url = new URL(req.url);
+    const provided = req.headers.get("x-webhook-secret") ?? url.searchParams.get("secret");
+    if (provided !== webhookSecret) return new Response("Unauthorized", { status: 401, headers: cors });
+  }
+
   try {
     const payload = await req.json().catch(() => ({}));
     console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 1500));
@@ -406,7 +413,7 @@ Deno.serve(async (req) => {
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "openai/gpt-5-mini", messages }),
+      body: JSON.stringify({ model: cfg.modelo_ia ?? "openai/gpt-5-mini", messages }),
     });
 
     if (!aiResp.ok) {
