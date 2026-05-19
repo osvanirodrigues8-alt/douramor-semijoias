@@ -446,7 +446,8 @@ Deno.serve(async (req) => {
       }
     }
     const adicionouAlgum = novosMostrados.size > jaMostrados.length;
-    const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? 2);
+    // Padrão 10: evita escalação prematura em testes e conversas normais
+    const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? 10);
     const novaTentativaSemResultado = adicionouAlgum
       ? 0
       : buscaProdutoSolicitada
