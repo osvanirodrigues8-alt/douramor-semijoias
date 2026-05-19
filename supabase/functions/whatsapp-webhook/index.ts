@@ -232,12 +232,15 @@ Deno.serve(async (req) => {
       await supabase.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
     }
 
+    // Load history early — needed by flow engine (ia_resumir) and AI prompt
+    const { data: hist } = await supabase.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(50);
+
     // === ENGINE DE FLUXO VISUAL — tenta executar fluxo ativo antes da IA livre ===
     const fluxoVariaveis = ((conversa.contexto as any)?.fluxo?.variaveis ?? {}) as Record<string, any>;
     const fluxoResult = await executarFluxo({
       supabase, conversa, cliente, cfg, cfgAg,
       mensagemUsuario: text, canal: "whatsapp",
-      hist: [], variaveis: fluxoVariaveis, lovableKey: LOVABLE_KEY,
+      hist: hist ?? [], variaveis: fluxoVariaveis, lovableKey: LOVABLE_KEY,
     });
     if (fluxoResult.handled) {
       const replyFluxo = fluxoResult.reply ?? MSG_HUMANO;
@@ -257,7 +260,8 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, fluxo: true, sent: sendResp.ok, escalar: fluxoResult.escalar }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     // Se fluxo passou para "msg_ia", a instrução fica em variaveis.__ia_instrucao__
-    const instrucaoExtraFluxo: string | undefined = fluxoVariaveis.__ia_instrucao__;
+    const instrucaoExtraFluxo: string | undefined =
+      ((conversa.contexto as any)?.fluxo?.variaveis as any)?.__ia_instrucao__ ?? fluxoVariaveis.__ia_instrucao__;
 
 
     // === Busca inteligente de produtos ===
@@ -316,10 +320,9 @@ Deno.serve(async (req) => {
 
     const produtosParaPrompt = produtos.slice(0, 30);
 
-    const [{ data: cupons }, { data: faqs }, { data: hist }] = await Promise.all([
+    const [{ data: cupons }, { data: faqs }] = await Promise.all([
       supabase.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabase.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
-      supabase.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(50),
     ]);
 
     const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist ?? []);
@@ -358,9 +361,11 @@ Deno.serve(async (req) => {
       if (!cepUsar) {
         pediuFretemasSemCep = true;
       } else {
+        const taxaFallback = Number(cfg?.taxa_entrega ?? 0);
+        const opcaoFallback: OpcaoFrete[] = [{ nome: taxaFallback === 0 ? "Frete Grátis" : "Entrega Padrão", preco: taxaFallback, prazo_dias: null }];
         const conn = await carregarConexaoNS(supabase);
         if (!conn) {
-          freteFalhou = true;
+          cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
         } else {
           // Escolhe produtos pra cotação: já mostrados ou top do filtro
           const nomesMostrados = new Set(jaMostrados.map((n) => n.toLowerCase()));
@@ -368,7 +373,7 @@ Deno.serve(async (req) => {
           const fallback = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
           const escolha = (candidatos.length ? candidatos : fallback).slice(0, 1);
           if (!escolha.length) {
-            freteFalhou = true;
+            cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
           } else {
             const r = await calcularFreteNuvemshop({
               conn,
@@ -385,17 +390,12 @@ Deno.serve(async (req) => {
                 ]);
               }
             } else {
-              console.error("[frete] falha:", r.erro);
-              freteFalhou = true;
+              console.error("[frete] falha NS:", r.erro);
+              cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
             }
           }
         }
       }
-    }
-
-    // Precisa buscar produtos com variant_id também — refaz query mínima se necessário
-    if (querFrete && cepUsar && freteModo === "nuvemshop" && !cotacaoFrete && !freteFalhou) {
-      freteFalhou = true;
     }
 
     const systemPrompt = buildSystemPrompt({

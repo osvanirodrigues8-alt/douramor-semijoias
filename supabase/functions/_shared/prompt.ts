@@ -540,9 +540,10 @@ export function calcularProximoFollowup(
 // Verifica se está dentro do horário de atendimento
 export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
   try {
-    // São Paulo UTC-3
-    const local = new Date(agora.getTime() + (-180 - agora.getTimezoneOffset()) * 60000);
-    const hh = local.getHours() * 60 + local.getMinutes();
+    // São Paulo (respeita horário de verão de out–fev)
+    const timeStr = agora.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false });
+    const [hStr, mStr] = timeStr.split(":");
+    const hh = parseInt(hStr) * 60 + parseInt(mStr);
     const [hi, mi] = String(cfgAg?.horario_inicio ?? "08:00").split(":").map(Number);
     const [hf, mf] = String(cfgAg?.horario_fim ?? "22:00").split(":").map(Number);
     return hh >= hi * 60 + mi && hh <= hf * 60 + mf;

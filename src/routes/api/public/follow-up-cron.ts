@@ -57,7 +57,7 @@ async function processFollowUps() {
 
       const fupsHoje = conv.fups_enviados_hoje ?? 0;
       const diaAtual = conv.dia_followup_atual ?? 0;
-      const numeroTentativa = (fupsHoje + 1) as 1 | 2 | 3;
+      const numeroTentativa = (Math.min(3, fupsHoje + 1)) as 1 | 2 | 3;
 
       // Identifica produtos em foco (links/nomes na conversa)
       const textoAssistant = (hist ?? []).filter((m: any) => m.papel === "assistant").map((m: any) => m.conteudo).join("\n");

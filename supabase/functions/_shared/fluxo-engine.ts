@@ -654,5 +654,6 @@ export async function executarFluxo(ctx: Ctx): Promise<FluxoResult> {
 async function persistirEstado(ctx: Ctx, fluxoId: string, noAtual: string | null, aguardando: any) {
   const contexto = (ctx.conversa.contexto ?? {}) as any;
   contexto.fluxo = noAtual ? { fluxo_id: fluxoId, no_atual: noAtual, aguardando, variaveis: ctx.variaveis } : null;
+  ctx.conversa.contexto = contexto;
   await ctx.supabase.from("conversas").update({ contexto }).eq("id", ctx.conversa.id);
 }
