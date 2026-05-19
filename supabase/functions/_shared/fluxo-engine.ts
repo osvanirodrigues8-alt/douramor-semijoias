@@ -573,11 +573,13 @@ function proxAposAguardo(data: FluxoData, nodeId: string, varName: string, ctx: 
     return nextNodeFrom(data.edges, nodeId, valido ? "out" : "invalido");
   }
   if (tipo === "msg_botoes") {
-    const n = Number(String(varName).replace(/\D/g, "")) || 0;
+    // varName é "__botao__" — o valor real está em ctx.variaveis["botao"]
+    const n = Number(ctx.variaveis["botao"] ?? ctx.variaveis[varName.replace(/__/g, "")] ?? 1);
     return nextNodeFrom(data.edges, nodeId, `btn${n || 1}`);
   }
   if (tipo === "msg_lista") {
-    const n = Number(String(varName).replace(/\D/g, "")) || 0;
+    // varName é "__opcao__" — o valor real está em ctx.variaveis["opcao"]
+    const n = Number(ctx.variaveis["opcao"] ?? ctx.variaveis[varName.replace(/__/g, "")] ?? 0);
     return nextNodeFrom(data.edges, nodeId, n >= 1 && n <= 4 ? `op${n}` : "outro");
   }
   return nextNodeFrom(data.edges, nodeId, "out");
