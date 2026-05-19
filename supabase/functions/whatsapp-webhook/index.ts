@@ -407,13 +407,13 @@ Deno.serve(async (req) => {
 
     const messages = [
       { role: "system", content: systemPrompt },
-      ...(hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo })),
+      ...(hist ?? []).filter((m: any) => m.papel === "user" || m.papel === "assistant").map((m: any) => ({ role: m.papel, content: m.conteudo })),
     ];
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "openai/gpt-5-mini", messages }),
+      body: JSON.stringify({ model: cfg.modelo_ia ?? "google/gemini-2.5-flash", messages }),
     });
 
     if (!aiResp.ok) {
