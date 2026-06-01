@@ -65,24 +65,23 @@ Deno.serve(async (req) => {
       ...(hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo })),
     ];
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const systemMsg = messages.find((m: any) => m.role === "system")?.content ?? "";
+    const userMessages = messages.filter((m: any) => m.role !== "system");
+
+    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "google/gemini-2.5-flash", messages }),
+      headers: { "x-api-key": Deno.env.get("ANTHROPIC_API_KEY") ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemMsg, messages: userMessages }),
     });
 
     if (!aiResp.ok) {
       const txt = await aiResp.text();
       console.error("AI error:", aiResp.status, txt);
       if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Limite de requisições atingido, tente novamente em instantes." }), { status: 429, headers: { ...cors, "Content-Type": "application/json" } });
-      if (aiResp.status === 402) return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no painel Lovable." }), { status: 402, headers: { ...cors, "Content-Type": "application/json" } });
-      throw new Error(`AI gateway erro ${aiResp.status}`);
+      throw new Error(`AI erro ${aiResp.status}`);
     }
     const ai = await aiResp.json();
-    const reply = ai.choices?.[0]?.message?.content ?? "Desculpe, não consegui responder agora.";
+    const reply = ai.content?.[0]?.text ?? "Desculpe, não consegui responder agora.";
 
     await supabase.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
 

@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
     let midiaTranscricao: string | null = null;
     let descricaoMidia: string | null = null;
 
-    const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+    const LOVABLE_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
     if (!text && audioUrl) {
       midiaTipo = "audio"; midiaUrl = audioUrl;
@@ -240,7 +240,7 @@ Deno.serve(async (req) => {
     const fluxoResult = await executarFluxo({
       supabase, conversa, cliente, cfg, cfgAg,
       mensagemUsuario: text, canal: "whatsapp",
-      hist: hist ?? [], variaveis: fluxoVariaveis, lovableKey: LOVABLE_KEY,
+      hist: hist ?? [], variaveis: fluxoVariaveis, aiKey: LOVABLE_KEY,
     });
     if (fluxoResult.handled) {
       const replyFluxo = fluxoResult.reply ?? MSG_HUMANO;
@@ -410,10 +410,13 @@ Deno.serve(async (req) => {
       ...(hist ?? []).filter((m: any) => m.papel === "user" || m.papel === "assistant").map((m: any) => ({ role: m.papel, content: m.conteudo })),
     ];
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const systemMsg = messages.find((m: any) => m.role === "system")?.content ?? "";
+    const userMessages = messages.filter((m: any) => m.role !== "system");
+
+    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "google/gemini-2.5-flash", messages }),
+      headers: { "x-api-key": Deno.env.get("ANTHROPIC_API_KEY") ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemMsg, messages: userMessages }),
     });
 
     if (!aiResp.ok) {
@@ -422,7 +425,7 @@ Deno.serve(async (req) => {
       throw new Error(`AI ${aiResp.status}: ${txt.slice(0, 300)}`);
     }
     const ai = await aiResp.json();
-    let reply: string = (ai.choices?.[0]?.message?.content ?? "").trim();
+    let reply: string = (ai.content?.[0]?.text ?? "").trim();
     if (!reply) reply = MSG_HUMANO;
 
     // === Detecta tag [ESCALAR] ===

@@ -16,7 +16,7 @@ type Ctx = {
   canal: "whatsapp" | "site" | "instagram";
   hist: { papel: string; conteudo: string }[];
   variaveis: Record<string, any>;
-  lovableKey: string;
+  aiKey: string;
 };
 
 export type FluxoResult = {
@@ -269,12 +269,12 @@ async function executarNo(
       const cats = String(cfg.categorias ?? "compra,duvida,reclamacao,saudacao").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
       let cat = "outro";
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST", headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", messages: [{ role: "user", content: `Classifique em UMA categoria: ${cats.join(", ")}, ou "outro". Responda SÓ a palavra.\n\n"${ctx.mensagemUsuario}"` }] }),
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers: { "x-api-key": ctx.aiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 50, messages: [{ role: "user", content: `Classifique em UMA categoria: ${cats.join(", ")}, ou "outro". Responda SÓ a palavra.\n\n"${ctx.mensagemUsuario}"` }] }),
         });
         const j = await r.json();
-        const txt = String(j?.choices?.[0]?.message?.content ?? "").toLowerCase().trim();
+        const txt = String(j?.content?.[0]?.text ?? "").toLowerCase().trim();
         cat = cats.find((c) => txt.includes(c)) ?? "outro";
       } catch (e) { console.error("[ia_classificar]", e); }
       ctx.variaveis.__intencao__ = cat;
@@ -283,16 +283,14 @@ async function executarNo(
     case "ia_extrair": {
       const campos = String(cfg.campos ?? "produto,cor,tamanho").split(",").map((s) => s.trim()).filter(Boolean);
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST", headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [{ role: "user", content: `Extraia do texto os campos ${campos.join(", ")}. Responda JSON. Campos não encontrados = null.\n\n"${ctx.mensagemUsuario}"` }],
-            response_format: { type: "json_object" },
-          }),
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers: { "x-api-key": ctx.aiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 500, messages: [{ role: "user", content: `Extraia do texto os campos ${campos.join(", ")}. Responda SOMENTE com JSON válido, sem markdown. Campos não encontrados = null.\n\n"${ctx.mensagemUsuario}"` }] }),
         });
         const j = await r.json();
-        const obj = JSON.parse(j?.choices?.[0]?.message?.content ?? "{}");
+        const raw = String(j?.content?.[0]?.text ?? "{}");
+        const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+        const obj = JSON.parse(stripped || "{}");
         let achou = false;
         for (const c of campos) if (obj[c] != null) { ctx.variaveis[c] = obj[c]; achou = true; }
         return { proxId: nextNodeFrom(data.edges, node.id, achou ? "out" : "vazio") };
@@ -301,12 +299,12 @@ async function executarNo(
     case "ia_sentimento": {
       let sent = "neutro";
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST", headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", messages: [{ role: "user", content: `Classifique o sentimento (positivo, neutro, negativo). Só a palavra.\n\n"${ctx.mensagemUsuario}"` }] }),
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers: { "x-api-key": ctx.aiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 20, messages: [{ role: "user", content: `Classifique o sentimento (positivo, neutro, negativo). Só a palavra.\n\n"${ctx.mensagemUsuario}"` }] }),
         });
         const j = await r.json();
-        const t = String(j?.choices?.[0]?.message?.content ?? "").toLowerCase();
+        const t = String(j?.content?.[0]?.text ?? "").toLowerCase();
         sent = ["positivo", "negativo", "neutro"].find((s) => t.includes(s)) ?? "neutro";
       } catch {}
       ctx.variaveis.__sentimento__ = sent;
@@ -316,12 +314,12 @@ async function executarNo(
       const v = String(cfg.variavel ?? "resumo");
       const hist = ctx.hist.map((m) => `${m.papel}: ${m.conteudo}`).join("\n");
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST", headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: `Resuma a conversa em até 3 linhas:\n\n${hist}` }] }),
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers: { "x-api-key": ctx.aiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 300, messages: [{ role: "user", content: `Resuma a conversa em até 3 linhas:\n\n${hist}` }] }),
         });
         const j = await r.json();
-        ctx.variaveis[v] = String(j?.choices?.[0]?.message?.content ?? "").trim();
+        ctx.variaveis[v] = String(j?.content?.[0]?.text ?? "").trim();
       } catch {}
       return { proxId: nextNodeFrom(data.edges, node.id) };
     }
@@ -330,12 +328,12 @@ async function executarNo(
       const idi = String(cfg.idioma ?? "en");
       const v = String(cfg.variavel ?? "traducao");
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST", headers: { Authorization: `Bearer ${ctx.lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", messages: [{ role: "user", content: `Traduza para ${idi}. Só o texto:\n\n${txt}` }] }),
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST", headers: { "x-api-key": ctx.aiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 500, messages: [{ role: "user", content: `Traduza para ${idi}. Só o texto:\n\n${txt}` }] }),
         });
         const j = await r.json();
-        ctx.variaveis[v] = String(j?.choices?.[0]?.message?.content ?? "").trim();
+        ctx.variaveis[v] = String(j?.content?.[0]?.text ?? "").trim();
       } catch {}
       return { proxId: nextNodeFrom(data.edges, node.id) };
     }
