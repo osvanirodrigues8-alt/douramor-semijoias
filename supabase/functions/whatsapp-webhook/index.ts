@@ -21,7 +21,7 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
 };
 
-const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
+const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
 const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar pessoalmente 🙏";
 
 const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
@@ -501,7 +501,7 @@ Deno.serve(async (req) => {
     ).slice(0, 3);
     for (const p of produtosMencionados) {
       try {
-        const imgResp = await fetch("https://sm-urso.stevo.chat/send/media", {
+        const imgResp = await fetch("https://smv2-4.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
           body: JSON.stringify({
