@@ -241,8 +241,7 @@ async function executarNo(
     }
     case "verificar_dia": {
       const dias = String(cfg.dias ?? "1,2,3,4,5").split(",").map((s) => Number(s.trim()));
-      const diaSP = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })).getDay();
-      const ok = dias.includes(diaSP);
+      const ok = dias.includes(new Date().getDay());
       return { proxId: nextNodeFrom(data.edges, node.id, ok ? "sim" : "nao") };
     }
     case "contador": {
@@ -293,9 +292,7 @@ async function executarNo(
           }),
         });
         const j = await r.json();
-        const raw = String(j?.choices?.[0]?.message?.content ?? "{}");
-        const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-        const obj = JSON.parse(stripped || "{}");
+        const obj = JSON.parse(j?.choices?.[0]?.message?.content ?? "{}");
         let achou = false;
         for (const c of campos) if (obj[c] != null) { ctx.variaveis[c] = obj[c]; achou = true; }
         return { proxId: nextNodeFrom(data.edges, node.id, achou ? "out" : "vazio") };
@@ -571,53 +568,29 @@ function proxAposAguardo(data: FluxoData, nodeId: string, varName: string, ctx: 
     const cepValido = ctx.variaveis.__cep_valido__ === true;
     return nextNodeFrom(data.edges, nodeId, cepValido ? "out" : "invalido");
   }
-  if (tipo === "capturar_cpf") {
-    const cpfValido = ctx.variaveis.__cpf_valido__ === true;
-    return nextNodeFrom(data.edges, nodeId, cpfValido ? "out" : "invalido");
-  }
   if (tipo === "capturar_dados") {
     const valido = ctx.variaveis.__campo_valido__ !== false;
     return nextNodeFrom(data.edges, nodeId, valido ? "out" : "invalido");
   }
   if (tipo === "msg_botoes") {
-    const cfgNode = node?.data?.config ?? {};
-    const btns = ([cfgNode.btn1, cfgNode.btn2, cfgNode.btn3].filter(Boolean)) as string[];
-    const msgLower = ctx.mensagemUsuario.toLowerCase().trim();
-    const textIdx = btns.findIndex((b) => b.toLowerCase().trim() === msgLower);
+    // varName é "__botao__" — o valor real está em ctx.variaveis["botao"]
     const n = Number(ctx.variaveis["botao"] ?? ctx.variaveis[varName.replace(/__/g, "")] ?? 1);
-    const idx = textIdx >= 0 ? textIdx + 1 : (n || 1);
-    return nextNodeFrom(data.edges, nodeId, `btn${idx}`);
+    return nextNodeFrom(data.edges, nodeId, `btn${n || 1}`);
   }
   if (tipo === "msg_lista") {
-    const cfgNode = node?.data?.config ?? {};
-    const ops = String(cfgNode.opcoes ?? "").split("\n").map((s: string) => s.trim()).filter(Boolean);
-    const msgLower = ctx.mensagemUsuario.toLowerCase().trim();
-    const textIdx = ops.findIndex((o: string) => o.toLowerCase().trim() === msgLower);
+    // varName é "__opcao__" — o valor real está em ctx.variaveis["opcao"]
     const n = Number(ctx.variaveis["opcao"] ?? ctx.variaveis[varName.replace(/__/g, "")] ?? 0);
-    const idx = textIdx >= 0 ? textIdx + 1 : n;
-    return nextNodeFrom(data.edges, nodeId, idx >= 1 && idx <= 9 ? `op${idx}` : "outro");
+    return nextNodeFrom(data.edges, nodeId, n >= 1 && n <= 4 ? `op${n}` : "outro");
   }
   return nextNodeFrom(data.edges, nodeId, "out");
 }
 
 export async function executarFluxo(ctx: Ctx): Promise<FluxoResult> {
-  // Lê estado salvo antes de buscar o fluxo — para usar o fluxo_id correto ao retomar
-  const contexto = (ctx.conversa.contexto ?? {}) as any;
-  const estado = contexto.fluxo ?? null;
-
-  // Usa o fluxo salvo na conversa (ao retomar) ou o fluxo ativo mais recente
-  let fluxo: any = null;
-  if (estado?.fluxo_id) {
-    const { data: f } = await ctx.supabase.from("fluxos").select("id,canal,versao_atual").eq("id", estado.fluxo_id).maybeSingle();
-    if (f) fluxo = f;
-  }
-  if (!fluxo) {
-    const { data: fluxos } = await ctx.supabase
-      .from("fluxos").select("id,canal,versao_atual")
-      .eq("ativo", true).in("canal", [ctx.canal, "todos"])
-      .order("atualizado_em", { ascending: false }).limit(1);
-    fluxo = fluxos?.[0] ?? null;
-  }
+  const { data: fluxos } = await ctx.supabase
+    .from("fluxos").select("id,canal,versao_atual")
+    .eq("ativo", true).in("canal", [ctx.canal, "todos"])
+    .order("atualizado_em", { ascending: false }).limit(1);
+  const fluxo = fluxos?.[0];
   if (!fluxo) return { handled: false };
 
   const { data: versao } = await ctx.supabase
@@ -626,6 +599,8 @@ export async function executarFluxo(ctx: Ctx): Promise<FluxoResult> {
   const data = (versao?.dados as unknown as FluxoData) ?? null;
   if (!data || !data.nodes?.length) return { handled: false };
 
+  const contexto = (ctx.conversa.contexto ?? {}) as any;
+  const estado = contexto.fluxo ?? null;
   let atualId: string | null = estado?.no_atual ?? null;
   const aguardando = estado?.aguardando as { variavel?: string } | null | undefined;
   if (estado?.variaveis) ctx.variaveis = { ...estado.variaveis, ...ctx.variaveis };
@@ -637,8 +612,6 @@ export async function executarFluxo(ctx: Ctx): Promise<FluxoResult> {
   } else if (!atualId) {
     const inicial = escolherNoInicial(data, ctx);
     if (!inicial) return { handled: false };
-    // gatilho_inicio só dispara no 1º contato — ctx.hist inclui a mensagem atual
-    if (inicial.data?.tipo === "gatilho_inicio" && ctx.hist.length > 1) return { handled: false };
     atualId = inicial.id;
   }
 
