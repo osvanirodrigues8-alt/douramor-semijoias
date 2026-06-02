@@ -28,20 +28,61 @@ console.log('⚡ Bundlando Edge Function...')
 const funcDir = join(outDir, 'functions', 'render.func')
 mkdirSync(funcDir, { recursive: true })
 
+// Cria wrapper Node.js que adapta a interface Fetch API → Node.js http
+const serverPath = join(root, 'dist', 'server', 'server.js').replace(/\\/g, '/')
+const wrapperCode = `
+import server from '${serverPath}'
+
+export default async function handler(req, res) {
+  const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'))
+  const headers = new Headers(req.headers)
+
+  let body = undefined
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    body = await new Promise((resolve, reject) => {
+      const chunks = []
+      req.on('data', c => chunks.push(c))
+      req.on('end', () => resolve(Buffer.concat(chunks)))
+      req.on('error', reject)
+    })
+  }
+
+  const request = new Request(url.toString(), {
+    method: req.method,
+    headers,
+    body: body?.length ? body : undefined,
+  })
+
+  const response = await server.fetch(request)
+
+  res.statusCode = response.status
+  response.headers.forEach((value, key) => res.setHeader(key, value))
+
+  const buffer = await response.arrayBuffer()
+  res.end(Buffer.from(buffer))
+}
+`
+writeFileSync(join(funcDir, 'wrapper.mjs'), wrapperCode)
+
 await build({
-  entryPoints: [join(root, 'dist', 'server', 'server.js')],
+  entryPoints: [join(funcDir, 'wrapper.mjs')],
   bundle: true,
   format: 'esm',
-  platform: 'browser', // Edge runtime usa browser-like env
+  platform: 'node',
   outfile: join(funcDir, 'index.js'),
-  external: ['node:*'],
+  external: [],
   minify: false,
 })
 
-// .vc-config.json para Edge Function
+// Remove wrapper temporário
+import { unlinkSync } from 'fs'
+unlinkSync(join(funcDir, 'wrapper.mjs'))
+
+// .vc-config.json para Node.js Function
 writeFileSync(join(funcDir, '.vc-config.json'), JSON.stringify({
-  runtime: 'edge',
-  entrypoint: 'index.js',
+  runtime: 'nodejs20.x',
+  handler: 'index.js',
+  launcherType: 'Nodejs',
 }))
 
 // 5. Routing config
