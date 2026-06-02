@@ -85,17 +85,19 @@ writeFileSync(join(funcDir, '.vc-config.json'), JSON.stringify({
   launcherType: 'Nodejs',
 }))
 
-// 5. Routing config
+// 5. Routing config — filesystem handle serve arquivos estáticos primeiro
 writeFileSync(join(outDir, 'config.json'), JSON.stringify({
   version: 3,
   routes: [
-    // Assets estáticos
+    // Cache headers para assets
     {
       src: '^/assets/(.*)$',
       headers: { 'cache-control': 'public, max-age=31536000, immutable' },
       continue: true,
     },
-    // Tudo mais → Edge Function SSR
+    // Serve arquivos estáticos de .vercel/output/static/
+    { handle: 'filesystem' },
+    // Tudo que não for estático → Node.js SSR
     { src: '^/(.*)$', dest: '/render' },
   ],
 }))
