@@ -19,12 +19,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const MODELOS = [
-  "google/gemini-2.5-flash",
-  "google/gemini-2.5-pro",
-  "google/gemini-2.5-flash-lite",
-  "openai/gpt-5-mini",
-  "openai/gpt-5",
-  "openai/gpt-5-nano",
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+  "claude-opus-4-8",
 ];
 
 type Faq = { id: string; pergunta: string; resposta: string; categoria: string | null; ativo: boolean; ordem: number };

@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
-const LINK_AVALIACAO_BASE = "https://douramor-semijoias.lovable.app/avaliar";
+const LINK_AVALIACAO_BASE = "https://douramor-semijoias.vercel.app/avaliar";
 
 async function enviarPosVenda() {
   const limite = new Date(Date.now() - 7 * 86400_000).toISOString();
@@ -30,7 +30,7 @@ async function enviarPosVenda() {
     const itens = Array.isArray(p.produtos_snapshot)
       ? (p.produtos_snapshot as any[]).map((s) => s?.nome).filter(Boolean).slice(0, 2).join(" e ")
       : "";
-    const categoriaLink = "https://douramor-semijoias.lovable.app/produtos";
+    const categoriaLink = "https://douramor-semijoias.vercel.app/produtos";
     const msg = `Oi ${primeiroNome}! 😊 Sua encomenda${itens ? ` (${itens})` : ""} chegou bem? Adoraríamos saber o que achou!\n\nDeixe sua avaliação aqui: ${LINK_AVALIACAO_BASE}/${p.id}\n\nE aproveita — separamos novidades que combinam com o que você comprou: ${categoriaLink} 💛`;
 
     const send = await fetch(STEVO_URL, {
@@ -87,17 +87,18 @@ ${transcript}
 
 Responda APENAS com as preferências, sem rodeios. Exemplo: "Brincos delicados, faixa até R$ 150, estilo clássico, feminino".`;
 
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 256,
         messages: [{ role: "user", content: prompt }],
       }),
     });
     if (!aiResp.ok) continue;
     const ai = await aiResp.json();
-    const pref = (ai.choices?.[0]?.message?.content ?? "").trim();
+    const pref = (ai.content?.[0]?.text ?? "").trim();
     if (pref && pref.length > 10 && pref.length < 300) {
       await supabaseAdmin.from("clientes").update({ preferencias: pref }).eq("id", cliente.id);
       processadas.push({ cliente: cliente.id, pref });

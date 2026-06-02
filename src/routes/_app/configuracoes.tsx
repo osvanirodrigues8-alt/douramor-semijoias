@@ -14,12 +14,9 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app/configuracoes")({ component: Configuracoes });
 
 const MODELOS = [
-  "google/gemini-2.5-flash",
-  "google/gemini-2.5-pro",
-  "google/gemini-2.5-flash-lite",
-  "openai/gpt-5-mini",
-  "openai/gpt-5",
-  "openai/gpt-5-nano",
+  "claude-haiku-4-5-20251001",
+  "claude-sonnet-4-6",
+  "claude-opus-4-8",
 ];
 
 const FORMAS = ["pix", "link", "entrega"];

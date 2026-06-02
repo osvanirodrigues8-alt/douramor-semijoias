@@ -79,23 +79,22 @@ async function processFollowUps() {
         modoFollowup: numeroTentativa,
       });
 
-      const messages = [
-        { role: "system", content: systemPrompt },
+      const userMessages = [
         ...(hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo })),
-        { role: "user", content: "(sem resposta)" }, // placeholder para a IA gerar a próxima fala
+        { role: "user", content: "(sem resposta)" },
       ];
 
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { Authorization: `Bearer ${process.env.LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: cfg.modelo_ia ?? "google/gemini-2.5-flash", messages }),
+        headers: { "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: userMessages }),
       });
       if (!aiResp.ok) {
         resultados.push({ conv: conv.id, erro: `AI ${aiResp.status}` });
         continue;
       }
       const ai = await aiResp.json();
-      let reply: string = (ai.choices?.[0]?.message?.content ?? "").trim();
+      let reply: string = (ai.content?.[0]?.text ?? "").trim();
       if (!reply) { resultados.push({ conv: conv.id, erro: "AI vazio" }); continue; }
       reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
 
