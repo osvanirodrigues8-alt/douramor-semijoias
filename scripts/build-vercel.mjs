@@ -28,12 +28,17 @@ console.log('⚡ Bundlando Edge Function...')
 const funcDir = join(outDir, 'functions', 'render.func')
 mkdirSync(funcDir, { recursive: true })
 
-// Cria wrapper Node.js que adapta a interface Fetch API → Node.js http
+// Cria wrapper CJS que adapta a interface Fetch API → Node.js http
 const serverPath = join(root, 'dist', 'server', 'server.js').replace(/\\/g, '/')
 const wrapperCode = `
-import server from '${serverPath}'
+let _server = null
+async function getServer() {
+  if (!_server) _server = (await import('${serverPath}')).default
+  return _server
+}
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  const server = await getServer()
   const url = new URL(req.url, 'http://' + (req.headers.host || 'localhost'))
   const headers = new Headers(req.headers)
 
@@ -47,36 +52,31 @@ export default async function handler(req, res) {
     })
   }
 
-  const request = new Request(url.toString(), {
-    method: req.method,
-    headers,
-    body: body?.length ? body : undefined,
-  })
-
+  const request = new Request(url.toString(), { method: req.method, headers, body: body?.length ? body : undefined })
   const response = await server.fetch(request)
 
   res.statusCode = response.status
   response.headers.forEach((value, key) => res.setHeader(key, value))
-
-  const buffer = await response.arrayBuffer()
-  res.end(Buffer.from(buffer))
+  res.end(Buffer.from(await response.arrayBuffer()))
 }
 `
-writeFileSync(join(funcDir, 'wrapper.mjs'), wrapperCode)
+writeFileSync(join(funcDir, 'wrapper.cjs'), wrapperCode)
 
 await build({
-  entryPoints: [join(funcDir, 'wrapper.mjs')],
+  entryPoints: [join(funcDir, 'wrapper.cjs')],
   bundle: true,
-  format: 'esm',
+  format: 'cjs',
   platform: 'node',
   outfile: join(funcDir, 'index.js'),
-  external: [],
+  external: ['./server.js'],  // server.js será importado dinamicamente em runtime
   minify: false,
 })
 
-// Remove wrapper temporário
+// Copia server.js e assets para a função poder importá-los em runtime
+cpSync(join(root, 'dist', 'server'), funcDir, { recursive: true })
+
 import { unlinkSync } from 'fs'
-unlinkSync(join(funcDir, 'wrapper.mjs'))
+unlinkSync(join(funcDir, 'wrapper.cjs'))
 
 // .vc-config.json para Node.js Function
 writeFileSync(join(funcDir, '.vc-config.json'), JSON.stringify({
