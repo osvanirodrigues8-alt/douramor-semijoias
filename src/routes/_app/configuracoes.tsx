@@ -29,7 +29,12 @@ function Configuracoes() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.from("configuracoes").select("*").limit(1).maybeSingle().then(({ data }) => setCfg(data));
+    supabase.from("configuracoes").select("*").limit(1).maybeSingle().then(async ({ data }) => {
+      if (data) { setCfg(data); return; }
+      // Nenhum registro — cria padrão
+      const { data: created } = await supabase.from("configuracoes").insert({}).select().maybeSingle();
+      setCfg(created ?? {});
+    });
   }, []);
 
   if (!cfg) return <div className="p-8 text-sm text-muted-foreground">Carregando…</div>;
@@ -39,7 +44,9 @@ function Configuracoes() {
   const save = async () => {
     setSaving(true);
     const { id, atualizado_em, ...rest } = cfg;
-    const { error } = await supabase.from("configuracoes").update(rest).eq("id", id);
+    const { error } = id
+      ? await supabase.from("configuracoes").update(rest).eq("id", id)
+      : await supabase.from("configuracoes").insert(rest);
     setSaving(false);
     if (error) toast.error(error.message);
     else toast.success("Configurações salvas");
