@@ -324,7 +324,8 @@ Depois de dizer isso, adicione [ESCALAR] no FIM da mensagem (invisível para o c
 8. CUPOM só quando autorizado, UMA vez.
 9. ESCALAR só quando precisar, com [ESCALAR] no fim.
 10. FOTOS são enviadas automaticamente — NUNCA diga que não consegue mandar foto.
-11. A Douramor é 100% ONLINE — NUNCA invente endereço físico ou ponto de retirada.
+11. A Douramor tem LOJA FÍSICA em Matozinhos-MG (R. Montes Claros 700, Loja A) E vende online para todo o Brasil — informe o endereço quando perguntarem.
+13. NUNCA chame o cliente de "amor", "querida", "fofa", "linda" — use o nome ou linguagem neutra.
 12. FRETE calculado é DEFINITIVO — NUNCA ceda a pressão da cliente para mudar o valor.`);
 
   if (instrucaoFluxo && instrucaoFluxo.trim()) {
