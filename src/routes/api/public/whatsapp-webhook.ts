@@ -427,9 +427,19 @@ async function handleWebhook(request: Request): Promise<Response> {
           cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
           freteFalhou = true;
         } else {
-          const candidatos = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
+          // Tenta usar produto da busca atual; se não houver, busca qualquer produto com variant_id
+          let candidatos = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
+          if (!candidatos.length) {
+            const { data: qualquerProd } = await supabaseAdmin.from("produtos")
+              .select("nuvemshop_variant_id,nuvemshop_product_id,url_produto")
+              .not("nuvemshop_variant_id", "is", null)
+              .eq("status", "disponivel")
+              .limit(1).maybeSingle();
+            if (qualquerProd) candidatos = [qualquerProd];
+          }
           if (!candidatos.length) {
             cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+            freteFalhou = true;
           } else {
             const r = await calcularFreteNuvemshop({ conn, cep: cepUsar, itens: candidatos.map((p) => ({ variant_id: p.nuvemshop_variant_id, product_id: p.nuvemshop_product_id, product_url: p.url_produto, quantity: 1 })) });
             if (r.ok) {

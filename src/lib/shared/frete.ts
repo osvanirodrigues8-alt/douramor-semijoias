@@ -2,7 +2,7 @@
 const NS_API = "https://api.tiendanube.com/v1";
 const UA = "Douramor Agente IA (contato@douramor.com.br)";
 
-export type OpcaoFrete = { nome: string; preco: number; prazo_dias: number | null };
+export type OpcaoFrete = { nome: string; preco: number; prazo_dias: number | null; chega?: string | null };
 
 export function extrairCep(texto: string): string | null {
   const m = texto.match(/\b(\d{5})-?(\d{3})\b/);
@@ -72,11 +72,15 @@ function parsePreco(value: string | null): number {
 function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
   const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
   const opcoes = inputs.map((tag) => {
-    const nome = attr(tag, "data-name") ?? "Frete";
+    const nomeRaw = attr(tag, "data-name") ?? "Frete";
     const dataPrice = attr(tag, "data-price");
     const dataCost = attr(tag, "data-cost");
     const preco = dataPrice != null ? Number(dataPrice) || 0 : parsePreco(dataCost);
-    return { nome: nome.replace(/\s+/g, " ").trim(), preco, prazo_dias: null };
+    // Extrai o nome curto (antes do " - Chega") e a estimativa de entrega
+    const dashIdx = nomeRaw.indexOf(" - Chega");
+    const nome = (dashIdx > -1 ? nomeRaw.slice(0, dashIdx) : nomeRaw).replace(/\s+/g, " ").trim();
+    const chegaStr = dashIdx > -1 ? nomeRaw.slice(dashIdx + 3).trim() : null; // "Chega entre..."
+    return { nome, preco, prazo_dias: null as number | null, chega: chegaStr };
   }).filter((o) => o.nome && o.preco >= 0);
   const seen = new Set<string>();
   return opcoes.filter((o) => {

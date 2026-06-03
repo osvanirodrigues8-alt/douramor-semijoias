@@ -201,7 +201,7 @@ ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
   if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
     const linhas = cotacaoFrete.opcoes.map((o) => {
       const v = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;
-      const p = o.prazo_dias != null ? ` (~${o.prazo_dias} dias úteis)` : "";
+      const p = (o as any).chega ? ` — ${(o as any).chega}` : o.prazo_dias != null ? ` (~${o.prazo_dias} dias úteis)` : "";
       return `- ${o.nome}: ${v}${p}`;
     }).join("\n");
     const obrigatorio = cepRecebidoAgora
