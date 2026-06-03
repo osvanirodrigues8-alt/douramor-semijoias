@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { buildSystemPrompt } from "@/lib/shared/prompt";
+import { buildSystemPrompt, detectarPedidoHumano } from "@/lib/shared/prompt";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -24,18 +25,19 @@ async function handleChat(request: Request): Promise<Response> {
     if (!cfg) throw new Error("Configurações não encontradas");
 
     const [{ data: produtos }, { data: cupons }, { data: faqs }] = await Promise.all([
-      supabaseAdmin.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").limit(40),
+      supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id,nuvemshop_product_id").eq("status", "disponivel").not("categoria", "in", "(relogio,oculos,outro)").limit(40),
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
 
     let cliente_id: string | null = null;
+    let cliente: any = null;
     if (contato) {
-      const { data: existing } = await supabaseAdmin.from("clientes").select("id").eq("contato", contato).maybeSingle();
-      if (existing) cliente_id = existing.id;
+      const { data: existing } = await supabaseAdmin.from("clientes").select("*").eq("contato", contato).maybeSingle();
+      if (existing) { cliente = existing; cliente_id = existing.id; }
       else {
-        const { data: novo } = await supabaseAdmin.from("clientes").insert({ contato, canal_origem: canal }).select("id").single();
-        cliente_id = novo?.id ?? null;
+        const { data: novo } = await supabaseAdmin.from("clientes").insert({ contato, canal_origem: canal }).select("*").single();
+        cliente = novo; cliente_id = novo?.id ?? null;
       }
     }
 
@@ -47,11 +49,78 @@ async function handleChat(request: Request): Promise<Response> {
       await supabaseAdmin.from("conversas").update({ cliente_id }).eq("id", conversa.id);
     }
 
-    await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
+    // Conversa pausada por humano
+    if (conversa.precisa_humano) {
+      return new Response(JSON.stringify({ reply: "Um momento! Nossa equipe já está ciente e vai te responder em breve 💛", pausada: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
+    // Detectar pedido de humano antes de chamar IA
+    const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
+    const pedidoHumano = detectarPedidoHumano(message, palavrasExtras);
+    if (pedidoHumano.sim) {
+      const msgEscalar = "Deixa eu chamar alguém da nossa equipe pra te ajudar melhor, tá? Um momento! 💛";
+      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
+      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgEscalar });
+      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString() }).eq("id", conversa.id);
+      return new Response(JSON.stringify({ reply: msgEscalar, escalado: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
+
+    await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
     const { data: hist } = await supabaseAdmin.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
 
-    const systemPrompt = buildSystemPrompt({ cfg, cfgAg, produtos: produtos ?? [], cupons: cupons ?? [], faqs: faqs ?? [], canal: canal === "whatsapp" ? "whatsapp" : "site" });
+    // Cálculo de frete
+    let cotacaoFrete: { cep: string; opcoes: OpcaoFrete[] } | null = null;
+    let freteFalhou = false;
+    let pediuFretemasSemCep = false;
+    const freteModo = cfgAg?.frete_modo ?? "nuvemshop";
+    const cepNaMsg = extrairCep(message);
+    const cepSalvo = (cliente?.cep as string | undefined) ?? ((conversa.contexto as any)?.cep as string | undefined) ?? null;
+    const cepUsar = cepNaMsg ?? cepSalvo;
+    const querFrete = detectaIntencaoFrete(message) || !!cepNaMsg;
+
+    if (freteModo === "nuvemshop" && querFrete) {
+      if (!cepUsar) {
+        pediuFretemasSemCep = true;
+      } else {
+        const taxaFallback = Number(cfg?.taxa_entrega ?? 0);
+        const opcaoFallback: OpcaoFrete[] = [{ nome: taxaFallback === 0 ? "Frete Grátis" : "Entrega Padrão", preco: taxaFallback, prazo_dias: null }];
+        const conn = await carregarConexaoNS(supabaseAdmin as any);
+        if (!conn) {
+          cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+          freteFalhou = true;
+        } else {
+          let candidatos = (produtos ?? []).filter((p: any) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
+          if (!candidatos.length) {
+            const { data: qualquerProd } = await supabaseAdmin.from("produtos").select("nuvemshop_variant_id,nuvemshop_product_id,url_produto").not("nuvemshop_variant_id", "is", null).eq("status", "disponivel").limit(1).maybeSingle();
+            if (qualquerProd) candidatos = [qualquerProd];
+          }
+          if (!candidatos.length) {
+            cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+            freteFalhou = true;
+          } else {
+            const r = await calcularFreteNuvemshop({ conn, cep: cepUsar, itens: candidatos.map((p: any) => ({ variant_id: p.nuvemshop_variant_id, product_id: p.nuvemshop_product_id, product_url: p.url_produto, quantity: 1 })) });
+            if (r.ok) {
+              cotacaoFrete = { cep: cepUsar, opcoes: r.opcoes };
+              if (cepNaMsg && conversa.id) {
+                await supabaseAdmin.from("conversas").update({ contexto: { ...(typeof conversa.contexto === "object" && conversa.contexto !== null ? conversa.contexto : {}), cep: cepUsar } }).eq("id", conversa.id);
+              }
+            } else {
+              cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+              freteFalhou = true;
+            }
+          }
+        }
+      }
+    }
+
+    const systemPrompt = buildSystemPrompt({
+      cfg, cfgAg,
+      produtos: (produtos ?? []).filter((p: any) => p.url_produto || p.url_foto),
+      cupons: cupons ?? [], faqs: faqs ?? [],
+      canal: canal === "whatsapp" ? "whatsapp" : "site",
+      cliente,
+      cotacaoFrete, freteFalhou, pediuFretemasSemCep,
+    });
 
     const userMessages = (hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo }));
 
@@ -68,11 +137,19 @@ async function handleChat(request: Request): Promise<Response> {
       throw new Error(`AI erro ${aiResp.status}`);
     }
     const ai = await aiResp.json();
-    const reply = ai.content?.[0]?.text ?? "Desculpe, não consegui responder agora.";
+    let reply: string = (ai.content?.[0]?.text ?? "Desculpe, não consegui responder agora.").trim();
+
+    // Processar tag de escalação
+    let escalado = false;
+    if (/\[ESCALAR\]/i.test(reply)) {
+      escalado = true;
+      reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
+      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Juliana decidiu escalar", humano_em: new Date().toISOString() }).eq("id", conversa.id);
+    }
 
     await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
 
-    return new Response(JSON.stringify({ reply, conversa_id: conversa.id }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ reply, conversa_id: conversa.id, escalado }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[chat]", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
