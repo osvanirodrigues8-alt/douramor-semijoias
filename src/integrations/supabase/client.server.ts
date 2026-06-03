@@ -24,7 +24,10 @@ function createSupabaseAdminClient() {
       storage: undefined,
       persistSession: false,
       autoRefreshToken: false,
-    }
+    },
+    realtime: {
+      transport: class { constructor() {} on() {} connect() {} disconnect() {} } as any,
+    },
   });
 }
 
