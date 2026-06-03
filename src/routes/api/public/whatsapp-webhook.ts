@@ -456,8 +456,20 @@ async function handleWebhook(request: Request): Promise<Response> {
           cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
           freteFalhou = true;
         } else {
-          // Tenta usar produto da busca atual; se não houver, busca qualquer produto com variant_id
-          let candidatos = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
+          // Usa produto abaixo de R$200 para cálculo — produtos acima ativam promoção de frete grátis
+          // e retornam R$0, mesmo que o pedido do cliente seja menor que o mínimo da promoção.
+          let candidatos = produtos.filter((p) => (p.nuvemshop_variant_id || p.nuvemshop_product_id) && Number(p.preco) < 200).slice(0, 1);
+          if (!candidatos.length) {
+            const { data: prodBarato } = await supabaseAdmin.from("produtos")
+              .select("nuvemshop_variant_id,nuvemshop_product_id,url_produto,preco")
+              .not("nuvemshop_variant_id", "is", null)
+              .eq("status", "disponivel")
+              .lt("preco", 200)
+              .order("preco", { ascending: true })
+              .limit(1).maybeSingle();
+            if (prodBarato) candidatos = [prodBarato];
+          }
+          // Último fallback: qualquer produto com variant_id
           if (!candidatos.length) {
             const { data: qualquerProd } = await supabaseAdmin.from("produtos")
               .select("nuvemshop_variant_id,nuvemshop_product_id,url_produto")

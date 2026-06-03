@@ -89,7 +89,11 @@ async function handleChat(request: Request): Promise<Response> {
           cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
           freteFalhou = true;
         } else {
-          let candidatos = (produtos ?? []).filter((p: any) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
+          let candidatos = (produtos ?? []).filter((p: any) => (p.nuvemshop_variant_id || p.nuvemshop_product_id) && Number(p.preco) < 200).slice(0, 1);
+          if (!candidatos.length) {
+            const { data: prodBarato } = await supabaseAdmin.from("produtos").select("nuvemshop_variant_id,nuvemshop_product_id,url_produto,preco").not("nuvemshop_variant_id", "is", null).eq("status", "disponivel").lt("preco", 200).order("preco", { ascending: true }).limit(1).maybeSingle();
+            if (prodBarato) candidatos = [prodBarato];
+          }
           if (!candidatos.length) {
             const { data: qualquerProd } = await supabaseAdmin.from("produtos").select("nuvemshop_variant_id,nuvemshop_product_id,url_produto").not("nuvemshop_variant_id", "is", null).eq("status", "disponivel").limit(1).maybeSingle();
             if (qualquerProd) candidatos = [qualquerProd];
