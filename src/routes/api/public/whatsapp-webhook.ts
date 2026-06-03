@@ -75,7 +75,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
   try {
     const payload = await request.json().catch(() => ({}));
-    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 800));
+    console.log("[stevo-webhook] payload-FULL:", JSON.stringify(payload).slice(0, 3000));
 
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
