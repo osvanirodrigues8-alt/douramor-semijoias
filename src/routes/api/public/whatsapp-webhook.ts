@@ -184,12 +184,20 @@ async function handleWebhook(request: Request): Promise<Response> {
     if (!cfg) throw new Error("Configurações não encontradas");
 
     // Upsert cliente — evita race condition e duplicatas
-    const { data: clienteUpsert } = await supabaseAdmin.from("clientes")
-      .upsert({ contato: numero, canal_origem: "whatsapp", nome: pushName ?? undefined }, { onConflict: "contato", ignoreDuplicates: false })
+    const { data: clienteUpsert, error: errUpsert } = await supabaseAdmin.from("clientes")
+      .upsert({ contato: numero, canal_origem: "whatsapp", ...(pushName ? { nome: pushName } : {}) }, { onConflict: "contato", ignoreDuplicates: false })
       .select("*").maybeSingle();
-    // Sempre re-buscar para garantir todos os campos (incluindo cep e outros que podem não vir no upsert)
+    if (errUpsert) console.error("[cliente upsert]", errUpsert.message);
+    // Re-buscar para garantir todos os campos (cep, preferencias, etc.)
     const { data: clienteCompleto } = await supabaseAdmin.from("clientes").select("*").eq("contato", numero).maybeSingle();
     let cliente: any = clienteCompleto ?? clienteUpsert;
+    // Se ainda não existe (raro), cria
+    if (!cliente) {
+      const { data: novoCliente } = await supabaseAdmin.from("clientes")
+        .insert({ contato: numero, canal_origem: "whatsapp", ...(pushName ? { nome: pushName } : {}) })
+        .select("*").maybeSingle();
+      cliente = novoCliente;
+    }
     if (cliente && !cliente.nome && pushName) {
       await supabaseAdmin.from("clientes").update({ nome: pushName }).eq("id", cliente.id);
       cliente.nome = pushName;
@@ -244,7 +252,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao });
     if (errMsgUser) console.error("[mensagens insert user]", errMsgUser);
 
-    await supabaseAdmin.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
+    if (cliente?.id) await supabaseAdmin.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
     await supabaseAdmin.from("conversas").update({ fups_enviados_hoje: 0, dia_followup_atual: 0, proximo_followup_em: null, data_inicio_followup: null }).eq("id", conversa.id);
 
     if (conversa.precisa_humano === true) {
