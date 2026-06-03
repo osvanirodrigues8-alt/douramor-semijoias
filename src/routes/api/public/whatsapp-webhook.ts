@@ -10,6 +10,7 @@ import {
   detectarTipoConversa,
   detectarTemperatura,
   transcreverAudio,
+  transcreverAudioBase64,
   descreverImagem,
   extrairKeywordsDeDescricao,
 } from "@/lib/shared/prompt";
@@ -75,7 +76,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
   try {
     const payload = await request.json().catch(() => ({}));
-    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 800));
+    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 1200));
 
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
@@ -111,16 +112,58 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Áudio: transcreve via Groq Whisper; se falhar, pede para escrever
     const audioUrl: string | undefined =
-      message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
-    if (!text && audioUrl) {
-      midiaTipo = "audio"; midiaUrl = audioUrl;
-      const tr = await transcreverAudio(audioUrl, ANTHROPIC_KEY);
+      message?.audioMessage?.url ??
+      message?.audioMessage?.mediaUrl ??
+      info?.audioMessage?.url ??
+      info?.audioMessage?.mediaUrl ??
+      data?.audioMessage?.url ??
+      data?.audioMessage?.mediaUrl ??
+      data?.audio?.url ??
+      data?.audio?.mediaUrl ??
+      data?.mediaUrl?.audio ??
+      data?.mediaUrl ??
+      data?.url;
+    const audioBase64: string | undefined =
+      data?.base64 ??
+      message?.base64 ??
+      data?.audioMessage?.base64 ??
+      message?.audioMessage?.base64 ??
+      info?.base64;
+    const audioMimetype: string =
+      message?.audioMessage?.mimetype ??
+      data?.audioMessage?.mimetype ??
+      info?.mimetype ??
+      "audio/ogg; codecs=opus";
+    const isAudio = !!(
+      audioUrl || audioBase64 ||
+      info?.MediaType === "ptt" || info?.MediaType === "audio" ||
+      data?.type === "ptt" || data?.type === "audio" ||
+      message?.audioMessage || data?.audioMessage
+    );
+
+    if (isAudio) {
+      console.log("[audio-detect] audioUrl:", audioUrl, "| base64:", audioBase64 ? `${audioBase64.length}chars` : "none", "| mimetype:", audioMimetype, "| isAudio:", isAudio);
+    }
+
+    if (!text && isAudio) {
+      midiaTipo = "audio";
+      midiaUrl = audioUrl ?? null;
+      let tr: string | null = null;
+
+      if (audioBase64) {
+        console.log("[audio] usando base64, tamanho:", audioBase64.length);
+        tr = await transcreverAudioBase64(audioBase64, audioMimetype, ANTHROPIC_KEY);
+      } else if (audioUrl) {
+        // Tenta baixar com autenticação do Stevo se necessário
+        tr = await transcreverAudio(audioUrl, ANTHROPIC_KEY, stevoKey);
+      }
+
       if (tr) {
         text = tr;
         midiaTranscricao = tr;
         console.log("[audio-transcrito]", tr.slice(0, 80));
       } else {
-        // Groq não disponível ou falhou — pede para escrever
+        console.warn("[audio] falha na transcrição — audioUrl:", audioUrl, "base64:", !!audioBase64);
         if (remoteJid) {
           const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
           await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);

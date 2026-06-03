@@ -453,17 +453,28 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
 }
 
 // Transcrição de áudio via Groq Whisper (rápido e gratuito)
-export async function transcreverAudio(url: string, _apiKey: string): Promise<string | null> {
+export async function transcreverAudio(url: string, _apiKey: string, stevoKey?: string): Promise<string | null> {
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) {
     console.warn("[transcreverAudio] GROQ_API_KEY não configurada");
     return null;
   }
   try {
-    // Baixa o áudio
-    const audioResp = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!audioResp.ok) return null;
+    // Baixa o áudio — tenta primeiro sem auth, depois com apikey do Stevo
+    let audioResp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!audioResp.ok && stevoKey) {
+      console.log("[transcreverAudio] retry com stevo apikey, status anterior:", audioResp.status);
+      audioResp = await fetch(url, {
+        headers: { apikey: stevoKey },
+        signal: AbortSignal.timeout(10000),
+      });
+    }
+    if (!audioResp.ok) {
+      console.error("[transcreverAudio] download falhou:", audioResp.status, url.slice(0, 80));
+      return null;
+    }
     const audioBuffer = await audioResp.arrayBuffer();
+    console.log("[transcreverAudio] download ok, bytes:", audioBuffer.byteLength);
     const contentType = audioResp.headers.get("content-type") ?? "audio/ogg";
 
     // Determina extensão pelo content-type
@@ -494,6 +505,62 @@ export async function transcreverAudio(url: string, _apiKey: string): Promise<st
     return text || null;
   } catch (e) {
     console.error("[transcreverAudio] fail", e);
+    return null;
+  }
+}
+
+// Transcrição de áudio a partir de base64 (formato Stevo)
+// Usa multipart manual com Buffer para evitar bug do undici com FormData + binário
+export async function transcreverAudioBase64(base64: string, _mimetype: string, _apiKey: string): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) { console.warn("[transcreverAudioBase64] GROQ_API_KEY não configurada"); return null; }
+  try {
+    const cleanB64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+    const audioBuffer = Buffer.from(cleanB64, 'base64');
+    console.log("[transcreverAudioBase64] buffer size:", audioBuffer.length);
+
+    const boundary = `----Boundary${Date.now()}`;
+    const CRLF = '\r\n';
+
+    const parts: Buffer[] = [];
+    const addField = (name: string, value: string) => {
+      parts.push(Buffer.from(
+        `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}${value}${CRLF}`
+      ));
+    };
+    addField("model", "whisper-large-v3-turbo");
+    addField("language", "pt");
+    addField("response_format", "text");
+
+    parts.push(Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="file"; filename="audio.ogg"${CRLF}` +
+      `Content-Type: audio/ogg${CRLF}${CRLF}`
+    ));
+    parts.push(audioBuffer);
+    parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
+
+    const body = Buffer.concat(parts);
+
+    const resp = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body: body,
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!resp.ok) {
+      console.error("[transcreverAudioBase64] Groq error", resp.status, await resp.text().catch(() => ""));
+      return null;
+    }
+    const text = (await resp.text()).trim();
+    console.log("[transcreverAudioBase64] ok:", text.slice(0, 80));
+    return text || null;
+  } catch (e) {
+    console.error("[transcreverAudioBase64] fail", e);
     return null;
   }
 }
