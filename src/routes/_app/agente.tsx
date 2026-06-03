@@ -15,7 +15,6 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/agente")({ component: Agente });
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const MODELOS = [
@@ -97,9 +96,9 @@ function Agente() {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/chat`, {
+      const res = await fetch(`/api/public/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessao_token: token, canal: "site", message: text }),
       });
       const data = await res.json();
@@ -111,7 +110,7 @@ function Agente() {
     }
   };
 
-  const embedCode = `<script src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js" data-supabase-url="${SUPABASE_URL}" data-supabase-key="${SUPABASE_KEY}"></script>`;
+  const embedCode = `<script src="${typeof window !== "undefined" ? window.location.origin : ""}/widget.js" data-api-url="${typeof window !== "undefined" ? window.location.origin : ""}/api/public/chat"></script>`;
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-6">
