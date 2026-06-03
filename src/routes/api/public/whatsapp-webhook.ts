@@ -75,7 +75,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
   try {
     const payload = await request.json().catch(() => ({}));
-    console.log("[stevo-webhook] payload-FULL:", JSON.stringify(payload).slice(0, 3000));
+    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 800));
 
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
@@ -383,8 +383,11 @@ async function handleWebhook(request: Request): Promise<Response> {
       return baratoPrimeiro ? Number(a.preco) - Number(b.preco) : Number(b.preco) - Number(a.preco);
     });
 
-    // Filtrar produtos sem URL antes de passar ao prompt
-    const produtosParaPrompt = produtos.filter((p) => p.url_produto || p.url_foto).slice(0, 30);
+    // Filtrar produtos sem URL e excluir categorias não-semi joias antes de passar ao prompt
+    const CATEGORIAS_EXCLUIR_PROMPT = ["relogio", "oculos", "outro"];
+    const produtosParaPrompt = produtos
+      .filter((p) => (p.url_produto || p.url_foto) && !CATEGORIAS_EXCLUIR_PROMPT.includes(p.categoria))
+      .slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
