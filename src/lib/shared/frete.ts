@@ -73,9 +73,11 @@ function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
   const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
   const opcoes = inputs.map((tag) => {
     const nomeRaw = attr(tag, "data-name") ?? "Frete";
-    const dataPrice = attr(tag, "data-price");
     const dataCost = attr(tag, "data-cost");
-    const preco = dataPrice != null ? Number(dataPrice) || 0 : parsePreco(dataCost);
+    const dataPrice = attr(tag, "data-price");
+    // Usa data-cost (custo real da transportadora) como fonte principal.
+    // data-price pode ser 0 por promoção de frete grátis e não reflete o valor real.
+    const preco = dataCost != null ? parsePreco(dataCost) : (dataPrice != null ? Number(dataPrice) || 0 : 0);
     // Extrai o nome curto (antes do " - Chega") e a estimativa de entrega
     const dashIdx = nomeRaw.indexOf(" - Chega");
     const nome = (dashIdx > -1 ? nomeRaw.slice(0, dashIdx) : nomeRaw).replace(/\s+/g, " ").trim();

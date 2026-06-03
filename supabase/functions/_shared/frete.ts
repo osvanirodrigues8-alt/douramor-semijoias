@@ -73,9 +73,9 @@ function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
   const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
   const opcoes = inputs.map((tag) => {
     const nome = attr(tag, "data-name") ?? "Frete";
-    const dataPrice = attr(tag, "data-price");
     const dataCost = attr(tag, "data-cost");
-    const preco = dataPrice != null ? Number(dataPrice) || 0 : parsePreco(dataCost);
+    const dataPrice = attr(tag, "data-price");
+    const preco = dataCost != null ? parsePreco(dataCost) : (dataPrice != null ? Number(dataPrice) || 0 : 0);
     return { nome: nome.replace(/\s+/g, " ").trim(), preco, prazo_dias: null };
   }).filter((o) => o.nome && o.preco >= 0);
   const seen = new Set<string>();
