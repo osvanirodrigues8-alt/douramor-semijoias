@@ -185,7 +185,8 @@ async function handleWebhook(request: Request): Promise<Response> {
     const intencaoCompra = detectarIntencaoCompra(text);
     if (intencaoCompra) await supabaseAdmin.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
 
-    const { data: hist } = await supabaseAdmin.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(50);
+    const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: hist } = await supabaseAdmin.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).gte("criado_em", seteDiasAtras).order("criado_em", { ascending: true }).limit(50);
 
     const fluxoVariaveis = ((conversa.contexto as any)?.fluxo?.variaveis ?? {}) as Record<string, any>;
     const fluxoResult = await executarFluxo({
