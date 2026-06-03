@@ -298,21 +298,66 @@ async function handleWebhook(request: Request): Promise<Response> {
     const destaqueIds = new Set<string>((cfgAg?.produtos_destaque_ids ?? []) as string[]);
     const jaMostrados: string[] = Array.isArray(conversa.produtos_mostrados) ? conversa.produtos_mostrados : [];
 
+    // Detectar categoria específica pedida (para priorizar e informar a IA)
+    const categoriaMap: Record<string, string> = {
+      anel: "anel", alianca: "anel", aliança: "anel",
+      colar: "colar", corrente: "colar", cordao: "colar", gargantilha: "colar", choker: "colar",
+      brinco: "brinco", argola: "brinco", earcuff: "brinco",
+      pulseira: "pulseira", bracelete: "bracelete", pulseirinha: "pulseira",
+      tornozeleira: "tornozeleira",
+      piercing: "piercing",
+      conjunto: "conjunto", kit: "conjunto",
+    };
+    const categoriasPedidas = Array.from(new Set(
+      baseKeywords.flatMap((k) => categoriaMap[k] ? [categoriaMap[k]] : [])
+    ));
+    const categoriaPrincipal = categoriasPedidas[0] ?? null;
+
+    // Categorias que NÃO são semi joias — nunca aparecem no fallback
+    const categoriasExcluidas = ["relogio", "oculos", "outro"];
+
     let produtos: any[] = [];
+    const selectProdutos = "id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id";
+
     if (keywords.length) {
-      const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
-      let qy = supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").or(orFilter).limit(60);
-      if (generoFiltro) qy = (qy as any).in("genero", [generoFiltro, "unissex"]);
-      if (precoMax) qy = (qy as any).lte("preco", precoMax);
-      const { data: matched } = await qy;
-      produtos = matched ?? [];
+      // 1. Busca prioritária: por categoria exata (quando detectada)
+      if (categoriaPrincipal) {
+        let qyCat = supabaseAdmin.from("produtos").select(selectProdutos)
+          .eq("status", "disponivel")
+          .eq("categoria", categoriaPrincipal)
+          .limit(40);
+        if (generoFiltro) qyCat = (qyCat as any).in("genero", [generoFiltro, "unissex"]);
+        if (precoMax) qyCat = (qyCat as any).lte("preco", precoMax);
+        const { data: catMatch } = await qyCat;
+        produtos = catMatch ?? [];
+      }
+
+      // 2. Se ainda tem espaço, complementa com busca por nome/descrição
+      if (produtos.length < 30) {
+        const orFilter = keywords.flatMap((k) => [`nome.ilike.%${k}%`, `descricao.ilike.%${k}%`]).join(",");
+        let qy = supabaseAdmin.from("produtos").select(selectProdutos)
+          .eq("status", "disponivel")
+          .or(orFilter)
+          .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
+          .limit(60);
+        if (generoFiltro) qy = (qy as any).in("genero", [generoFiltro, "unissex"]);
+        if (precoMax) qy = (qy as any).lte("preco", precoMax);
+        const { data: matched } = await qy;
+        const seen = new Set(produtos.map((p) => p.id));
+        for (const p of matched ?? []) if (!seen.has(p.id)) produtos.push(p);
+      }
     }
-    // Fallback geral só quando NÃO há keywords de categoria específica
-    const temKeywordCategoria = keywords.some((k) =>
+
+    // Fallback geral só quando NÃO há categoria específica pedida — nunca inclui relógio/óculos
+    const temKeywordCategoria = categoriaPrincipal !== null || keywords.some((k) =>
       /^(anel|alianca|colar|corrente|cordao|brinco|argola|pulseira|bracelete|tornozeleira|piercing|conjunto|kit|trio|choker|gargantilha)$/.test(k)
     );
-    if (produtos.length < 30 && !temKeywordCategoria) {
-      let qy = supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
+    if (produtos.length < 20 && !temKeywordCategoria) {
+      let qy = supabaseAdmin.from("produtos").select(selectProdutos)
+        .eq("status", "disponivel")
+        .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
+        .order("atualizado_em", { ascending: false })
+        .limit(40);
       if (generoFiltro) qy = (qy as any).in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = (qy as any).lte("preco", precoMax);
       const { data: extra } = await qy;
@@ -404,7 +449,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
-      cepRecebidoAgora: !!cepNaMsg,
+      cepRecebidoAgora: !!cepNaMsg, categoriaPedida: categoriaPrincipal,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)

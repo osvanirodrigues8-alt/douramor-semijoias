@@ -36,8 +36,9 @@ export function buildSystemPrompt(opts: {
   pediuFretemasSemCep?: boolean;
   tentativasEscalar?: number;
   cepRecebidoAgora?: boolean;
+  categoriaPedida?: string | null;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
@@ -227,6 +228,10 @@ ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
   if (faqs?.length) {
     blocos.push(`# FAQ\n${faqs.map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`).join("\n\n")}`);
+  }
+
+  if (categoriaPedida) {
+    blocos.push(`# FOCO DA BUSCA ATUAL\nA cliente pediu especificamente: **${categoriaPedida}**. Apresente SOMENTE produtos da categoria "${categoriaPedida}" do catálogo abaixo. NÃO sugira outras categorias a menos que o cliente peça.`);
   }
 
   blocos.push(`# CATÁLOGO DISPONÍVEL (use SOMENTE estes produtos — NUNCA invente)
