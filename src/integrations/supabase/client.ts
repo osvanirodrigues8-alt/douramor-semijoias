@@ -18,12 +18,19 @@ function createSupabaseClient() {
     throw new Error(message);
   }
 
+  const isServer = typeof window === 'undefined';
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
-      persistSession: true,
-      autoRefreshToken: true,
-    }
+      storage: isServer ? undefined : localStorage,
+      persistSession: !isServer,
+      autoRefreshToken: !isServer,
+    },
+    // Desabilita WebSocket no SSR (Node.js 20 não tem WebSocket nativo)
+    ...(isServer ? {
+      realtime: {
+        transport: class { constructor() {} on() { return this; } connect() {} disconnect() {} } as any,
+      }
+    } : {}),
   });
 }
 

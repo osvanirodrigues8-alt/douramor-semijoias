@@ -111,8 +111,8 @@ function NuvemshopIntegracao() {
             <Field label="Domínio" value={conn.dominio_loja ?? "—"} />
             <Field label="Permissões (scope)" value={conn.scope ?? "—"} />
             <Field
-              label="Conectada em"
-              value={new Date(conn.criado_em).toLocaleString("pt-BR")}
+              label="Token atualizado em"
+              value={new Date(conn.atualizado_em).toLocaleString("pt-BR")}
             />
           </div>
 
