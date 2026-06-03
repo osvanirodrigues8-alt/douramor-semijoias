@@ -18,8 +18,8 @@ async function handleChat(request: Request): Promise<Response> {
     }
 
     const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
-      supabaseAdmin.from("configuracoes").select("*").limit(1).maybeSingle(),
-      supabaseAdmin.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes_agente").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (!cfg) throw new Error("Configurações não encontradas");
 

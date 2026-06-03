@@ -161,8 +161,8 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Carregar configurações — sempre a row mais recente
     const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
-      supabaseAdmin.from("configuracoes").select("*").order("criado_em", { ascending: false }).limit(1).maybeSingle(),
-      supabaseAdmin.from("configuracoes_agente").select("*").order("criado_em", { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes_agente").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (!cfg) throw new Error("Configurações não encontradas");
 
