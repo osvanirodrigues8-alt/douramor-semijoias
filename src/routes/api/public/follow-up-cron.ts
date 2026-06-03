@@ -10,6 +10,23 @@ import {
 
 const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
 
+// ---------- auth helper ----------
+async function handleCronRequest(request: Request, label: string): Promise<Response> {
+  const secret = process.env.CRON_SECRET;
+  if (secret) {
+    const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
+    if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+  }
+  try {
+    const result = await processFollowUps();
+    console.log(`[${label}]`, JSON.stringify(result).slice(0, 1000));
+    return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
+  } catch (e) {
+    console.error(`[${label}] error`, e);
+    return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
+}
+
 async function processFollowUps() {
   const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
     supabaseAdmin.from("configuracoes").select("*").limit(1).maybeSingle(),
@@ -20,6 +37,7 @@ async function processFollowUps() {
   if (cfgAg.respeitar_horario && !dentroDoHorario(cfgAg)) return { ok: true, skipped: "fora do horário" };
 
   const agora = new Date().toISOString();
+  const hoje = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
   // Elegíveis: conversas whatsapp, última msg assistant, ainda dentro do ciclo de dias, com proximo_followup_em vencido (ou sem agendamento ainda)
   const diasTotal = Number(cfgAg.dias_total ?? 7);
@@ -55,11 +73,13 @@ async function processFollowUps() {
           : Promise.resolve({ data: null as any }),
       ]);
 
-      const fupsHoje = conv.fups_enviados_hoje ?? 0;
+      // Correção: zerar fups_enviados_hoje se o proximo_followup_em era de um dia anterior
+      const proximoFollowupDia = conv.proximo_followup_em ? conv.proximo_followup_em.slice(0, 10) : null;
+      const fupsHoje = (proximoFollowupDia && proximoFollowupDia < hoje) ? 0 : (conv.fups_enviados_hoje ?? 0);
       const diaAtual = conv.dia_followup_atual ?? 0;
       const numeroTentativa = (Math.min(3, fupsHoje + 1)) as 1 | 2 | 3;
 
-      // Identifica produtos em foco (links/nomes na conversa)
+      // Identifica produtos em foco (links na conversa do assistente)
       const textoAssistant = (hist ?? []).filter((m: any) => m.papel === "assistant").map((m: any) => m.conteudo).join("\n");
       const linksMencionados = new Set((textoAssistant.match(/https?:\/\/[^\s)]+/g) ?? []).map((u) => u.replace(/[.,;)]+$/, "")));
       const produtosEmFoco = (produtosTodos ?? []).filter((p) => p.url_produto && linksMencionados.has(p.url_produto)).slice(0, 5);
@@ -94,11 +114,47 @@ async function processFollowUps() {
         continue;
       }
       const ai = await aiResp.json();
-      let reply: string = (ai.content?.[0]?.text ?? "").trim();
-      if (!reply) { resultados.push({ conv: conv.id, erro: "AI vazio" }); continue; }
-      reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
+      const replyRaw: string = (ai.content?.[0]?.text ?? "").trim();
+      if (!replyRaw) { resultados.push({ conv: conv.id, erro: "AI vazio" }); continue; }
+
+      // Correção: detectar [ESCALAR] antes de remover a tag
+      const precisaEscalar = /\[ESCALAR\]/i.test(replyRaw);
+      const reply = replyRaw.replace(/\[ESCALAR\]/gi, "").trim();
+
+      if (precisaEscalar) {
+        // Marcar como precisa de humano e parar o ciclo de follow-up para esta conversa
+        await supabaseAdmin.from("conversas").update({ precisa_humano: true }).eq("id", conv.id);
+        resultados.push({ conv: conv.id, ok: true, escalado: true, dia: diaAtual });
+        continue;
+      }
 
       const numero = String(conv.sessao_token).replace(/^wa:/, "").replace(/@.*/, "").replace(/\D/g, "");
+
+      const novosFupsHoje = fupsHoje + 1;
+      const { proximo, novoDia, resetar } = calcularProximoFollowup(cfgAg, novosFupsHoje, diaAtual);
+
+      // Correção: atualizar proximo_followup_em imediatamente antes de enviar via Stevo
+      // para evitar reprocessamento duplo caso o insert de mensagem falhe após envio
+      if (resetar) {
+        if (conv.cliente_id) {
+          await supabaseAdmin.from("clientes").update({ temperatura_lead: "inativo" }).eq("id", conv.cliente_id);
+        }
+        await supabaseAdmin.from("conversas").update({
+          fups_enviados_hoje: novosFupsHoje,
+          dia_followup_atual: novoDia,
+          proximo_followup_em: null,
+          ultima_mensagem_papel: "assistant",
+        }).eq("id", conv.id);
+      } else {
+        await supabaseAdmin.from("conversas").update({
+          fups_enviados_hoje: novoDia !== diaAtual ? 0 : novosFupsHoje,
+          dia_followup_atual: novoDia,
+          proximo_followup_em: proximo?.toISOString() ?? null,
+          data_inicio_followup: conv.data_inicio_followup ?? new Date().toISOString().slice(0, 10),
+          ultima_mensagem_papel: "assistant",
+        }).eq("id", conv.id);
+      }
+
       const sendResp = await fetch(STEVO_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", apikey: process.env.STEVO_API_KEY ?? "" },
@@ -107,28 +163,6 @@ async function processFollowUps() {
       if (!sendResp.ok) { resultados.push({ conv: conv.id, erro: `Stevo ${sendResp.status}` }); continue; }
 
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: reply });
-
-      const novosFupsHoje = fupsHoje + 1;
-      const { proximo, novoDia, resetar } = calcularProximoFollowup(cfgAg, novosFupsHoje, diaAtual);
-
-      if (resetar) {
-        // Atingiu o limite de dias: marca como inativo
-        if (conv.cliente_id) {
-          await supabaseAdmin.from("clientes").update({ temperatura_lead: "inativo" }).eq("id", conv.cliente_id);
-        }
-        await supabaseAdmin.from("conversas").update({
-          fups_enviados_hoje: novosFupsHoje,
-          dia_followup_atual: novoDia,
-          proximo_followup_em: null,
-        }).eq("id", conv.id);
-      } else {
-        await supabaseAdmin.from("conversas").update({
-          fups_enviados_hoje: novoDia !== diaAtual ? 0 : novosFupsHoje,
-          dia_followup_atual: novoDia,
-          proximo_followup_em: proximo?.toISOString() ?? null,
-          data_inicio_followup: conv.data_inicio_followup ?? new Date().toISOString().slice(0, 10),
-        }).eq("id", conv.id);
-      }
 
       resultados.push({ conv: conv.id, ok: true, tentativa: numeroTentativa, dia: diaAtual });
     } catch (e) {
@@ -142,34 +176,8 @@ async function processFollowUps() {
 export const Route = createFileRoute("/api/public/follow-up-cron")({
   server: {
     handlers: {
-      POST: async ({ request }: { request: Request }) => {
-        const secret = process.env.CRON_SECRET;
-        if (secret) {
-          const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
-        }
-        try {
-          const result = await processFollowUps();
-          console.log("[follow-up-cron]", JSON.stringify(result).slice(0, 1000));
-          return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
-        } catch (e) {
-          console.error("[follow-up-cron] error", e);
-          return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { "Content-Type": "application/json" } });
-        }
-      },
-      GET: async ({ request }: { request: Request }) => {
-        const secret = process.env.CRON_SECRET;
-        if (secret) {
-          const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
-        }
-        try {
-          const result = await processFollowUps();
-          return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
-        } catch (e) {
-          return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { "Content-Type": "application/json" } });
-        }
-      },
+      POST: async ({ request }: { request: Request }) => handleCronRequest(request, "follow-up-cron POST"),
+      GET: async ({ request }: { request: Request }) => handleCronRequest(request, "follow-up-cron GET"),
     },
   },
 });

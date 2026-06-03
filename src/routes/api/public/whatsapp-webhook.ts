@@ -162,7 +162,7 @@ async function handleWebhook(request: Request): Promise<Response> {
         .eq("conversa_id", conv.id)
         .eq("papel", "assistant")
         .gte("criado_em", umMinutoAtras);
-      const isEco = (recentes ?? []).some((m: any) => String(m.conteudo ?? "").trim() === text!.trim() || String(m.conteudo ?? "").includes(text!.trim()));
+      const isEco = (recentes ?? []).some((m: any) => String(m.conteudo ?? "").trim() === text!.trim());
       if (isEco) return new Response(JSON.stringify({ ok: true, ignored: "eco" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
       // Registrar mensagem do atendente humano
@@ -187,17 +187,24 @@ async function handleWebhook(request: Request): Promise<Response> {
     const { data: clienteUpsert } = await supabaseAdmin.from("clientes")
       .upsert({ contato: numero, canal_origem: "whatsapp", nome: pushName ?? undefined }, { onConflict: "contato", ignoreDuplicates: false })
       .select("*").maybeSingle();
-    let cliente: any = clienteUpsert;
-    if (!cliente) {
-      const { data: cliExist } = await supabaseAdmin.from("clientes").select("*").eq("contato", numero).maybeSingle();
-      cliente = cliExist;
-    }
+    // Sempre re-buscar para garantir todos os campos (incluindo cep e outros que podem não vir no upsert)
+    const { data: clienteCompleto } = await supabaseAdmin.from("clientes").select("*").eq("contato", numero).maybeSingle();
+    let cliente: any = clienteCompleto ?? clienteUpsert;
     if (cliente && !cliente.nome && pushName) {
       await supabaseAdmin.from("clientes").update({ nome: pushName }).eq("id", cliente.id);
       cliente.nome = pushName;
     }
 
     // Upsert conversa — evita race condition por mensagens paralelas
+    // Tenta encontrar conversa existente com formato antigo de JID antes do upsert
+    const { data: convAntiga } = await supabaseAdmin.from("conversas")
+      .select("*")
+      .or(`sessao_token.eq.${sessao_token},sessao_token.eq.wa:${remoteJid},sessao_token.like.wa:${numero}%`)
+      .maybeSingle();
+    if (convAntiga && convAntiga.sessao_token !== sessao_token) {
+      // Migrar o sessao_token para o formato normalizado
+      await supabaseAdmin.from("conversas").update({ sessao_token }).eq("id", convAntiga.id);
+    }
     const { data: conversaUpsert } = await supabaseAdmin.from("conversas")
       .upsert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" }, { onConflict: "sessao_token", ignoreDuplicates: true })
       .select("*").maybeSingle();
@@ -218,7 +225,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       .limit(50);
     // Garantir ao menos as últimas 10 mensagens independente de data
     let hist = histRaw ?? [];
-    if (hist.length < 5) {
+    if (hist.length < 10) {
       const { data: recent } = await supabaseAdmin.from("mensagens")
         .select("papel, conteudo, criado_em")
         .eq("conversa_id", conversa.id)
@@ -281,7 +288,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     const pluraisJoias: Record<string, string> = {
       braceletes: "bracelete", aneis: "anel", brincos: "brinco", colares: "colar",
       correntes: "corrente", pulseiras: "pulseira", tornozeleiras: "tornozeleira",
-      aliancas: "alianca", aliancas: "alianca", conjuntos: "conjunto", piercings: "piercing",
+      aliancas: "alianca", alianças: "aliança", conjuntos: "conjunto", piercings: "piercing",
       argolas: "argola", gargantilhas: "gargantilha", chokers: "choker",
     };
     const normalizarPlural = (w: string): string => pluraisJoias[w] ?? (w.length > 5 ? w.replace(/([aeiou])s$/, "$1") : w);
@@ -332,6 +339,7 @@ async function handleWebhook(request: Request): Promise<Response> {
         let qyCat = supabaseAdmin.from("produtos").select(selectProdutos)
           .eq("status", "disponivel")
           .eq("categoria", categoriaPrincipal)
+          .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
           .limit(40);
         if (generoFiltro) qyCat = (qyCat as any).in("genero", [generoFiltro, "unissex"]);
         if (precoMax) qyCat = (qyCat as any).lte("preco", precoMax);
@@ -384,9 +392,8 @@ async function handleWebhook(request: Request): Promise<Response> {
     });
 
     // Filtrar produtos sem URL e excluir categorias não-semi joias antes de passar ao prompt
-    const CATEGORIAS_EXCLUIR_PROMPT = ["relogio", "oculos", "outro"];
     const produtosParaPrompt = produtos
-      .filter((p) => (p.url_produto || p.url_foto) && !CATEGORIAS_EXCLUIR_PROMPT.includes(p.categoria))
+      .filter((p) => (p.url_produto || p.url_foto) && !["relogio", "oculos", "outro"].includes(p.categoria))
       .slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
@@ -418,6 +425,11 @@ async function handleWebhook(request: Request): Promise<Response> {
     const cepSalvo = (cliente?.cep as string | undefined) ?? ((conversa.contexto as any)?.cep as string | undefined) ?? null;
     const cepUsar = cepNaMsg ?? cepSalvo;
     const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg;
+
+    // Salvar CEP sempre que informado pelo cliente, independente do resultado do frete
+    if (cepNaMsg && cliente?.id) {
+      await supabaseAdmin.from("clientes").update({ cep: cepNaMsg }).eq("id", cliente.id);
+    }
 
     if (freteModo === "nuvemshop" && querFrete) {
       if (!cepUsar) {
@@ -493,7 +505,6 @@ async function handleWebhook(request: Request): Promise<Response> {
         signal: ac.signal,
       });
     } catch (e: any) {
-      clearTimeout(aiTimer);
       if (e.name === "AbortError") {
         console.error("[webhook] Anthropic timeout");
         await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
@@ -502,8 +513,9 @@ async function handleWebhook(request: Request): Promise<Response> {
         return new Response(JSON.stringify({ ok: true, timeout: true }), { headers: { ...cors, "Content-Type": "application/json" } });
       }
       throw e;
+    } finally {
+      clearTimeout(aiTimer);
     }
-    clearTimeout(aiTimer);
 
     if (!aiResp.ok) throw new Error(`AI ${aiResp.status}`);
     const ai = await aiResp.json();

@@ -24,8 +24,10 @@ import { Route as AppAvaliacoesRouteImport } from './routes/_app/avaliacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app/atendimento'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
+import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
 import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
+import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
 import { Route as AppFluxosIdRouteImport } from './routes/_app/fluxos_.$id'
 import { Route as ApiPublicNuvemshopCallbackRouteImport } from './routes/api/public/nuvemshop/callback'
@@ -105,6 +107,12 @@ const AppAgendamentosRoute = AppAgendamentosRouteImport.update({
   path: '/agendamentos',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiPublicWhatsappWebhookRoute =
+  ApiPublicWhatsappWebhookRouteImport.update({
+    id: '/api/public/whatsapp-webhook',
+    path: '/api/public/whatsapp-webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicPosVendaCronRoute = ApiPublicPosVendaCronRouteImport.update({
   id: '/api/public/pos-venda-cron',
   path: '/api/public/pos-venda-cron',
@@ -113,6 +121,11 @@ const ApiPublicPosVendaCronRoute = ApiPublicPosVendaCronRouteImport.update({
 const ApiPublicFollowUpCronRoute = ApiPublicFollowUpCronRouteImport.update({
   id: '/api/public/follow-up-cron',
   path: '/api/public/follow-up-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
+  id: '/api/public/chat',
+  path: '/api/public/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIntegracoesNuvemshopRoute = AppIntegracoesNuvemshopRouteImport.update({
@@ -155,8 +168,10 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof AppRelatoriosRoute
   '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -177,8 +192,10 @@ export interface FileRoutesByTo {
   '/relatorios': typeof AppRelatoriosRoute
   '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -201,8 +218,10 @@ export interface FileRoutesById {
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_app/fluxos_/$id': typeof AppFluxosIdRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
+  '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -225,8 +244,10 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/fluxos/$id'
     | '/integracoes/nuvemshop'
+    | '/api/public/chat'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
+    | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesByTo: FileRoutesByTo
@@ -247,8 +268,10 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/fluxos/$id'
     | '/integracoes/nuvemshop'
+    | '/api/public/chat'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
+    | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   id:
@@ -270,8 +293,10 @@ export interface FileRouteTypes {
     | '/_app/relatorios'
     | '/_app/fluxos_/$id'
     | '/_app/integracoes/nuvemshop'
+    | '/api/public/chat'
     | '/api/public/follow-up-cron'
     | '/api/public/pos-venda-cron'
+    | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
   fileRoutesById: FileRoutesById
@@ -280,8 +305,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicFollowUpCronRoute: typeof ApiPublicFollowUpCronRoute
   ApiPublicPosVendaCronRoute: typeof ApiPublicPosVendaCronRoute
+  ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
 }
@@ -393,6 +420,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgendamentosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/public/whatsapp-webhook': {
+      id: '/api/public/whatsapp-webhook'
+      path: '/api/public/whatsapp-webhook'
+      fullPath: '/api/public/whatsapp-webhook'
+      preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/pos-venda-cron': {
       id: '/api/public/pos-venda-cron'
       path: '/api/public/pos-venda-cron'
@@ -405,6 +439,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/follow-up-cron'
       fullPath: '/api/public/follow-up-cron'
       preLoaderRoute: typeof ApiPublicFollowUpCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/chat': {
+      id: '/api/public/chat'
+      path: '/api/public/chat'
+      fullPath: '/api/public/chat'
+      preLoaderRoute: typeof ApiPublicChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/integracoes/nuvemshop': {
@@ -478,8 +519,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicFollowUpCronRoute: ApiPublicFollowUpCronRoute,
   ApiPublicPosVendaCronRoute: ApiPublicPosVendaCronRoute,
+  ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicHooksSyncNuvemshopProductsRoute:
     ApiPublicHooksSyncNuvemshopProductsRoute,
   ApiPublicNuvemshopCallbackRoute: ApiPublicNuvemshopCallbackRoute,
