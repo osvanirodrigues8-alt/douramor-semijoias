@@ -8,7 +8,7 @@ import {
   detectarTemperatura,
 } from "@/lib/shared/prompt";
 
-const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
+const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
 
 // ---------- auth helper ----------
 async function handleCronRequest(request: Request, label: string): Promise<Response> {

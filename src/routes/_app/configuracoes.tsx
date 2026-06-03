@@ -19,7 +19,7 @@ const MODELOS = [
   "claude-opus-4-8",
 ];
 
-const FORMAS = ["pix", "link", "entrega"];
+const FORMAS = ["pix", "cartao", "link"];
 
 function Configuracoes() {
   const [cfg, setCfg] = useState<any>(null);
