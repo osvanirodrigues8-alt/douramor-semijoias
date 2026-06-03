@@ -211,7 +211,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       /\b(masculin|homem|homens|menino|namorado|marido|esposo|pai|filho)\b/.test(lowText) ? "masculino" :
       /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
 
-    const baseKeywords = (lowText.match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !stop.has(w)).slice(0, 8);
+    // Normaliza plural simples: remove 's' final para melhor matching (ex: "braceletes" → "bracelete")
+    const normalizarPlural = (w: string) => w.replace(/([aeiou])s$/, "$1").replace(/es$/, "e").replace(/s$/, "");
+    const rawKeywords = (lowText.match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !stop.has(w)).slice(0, 8);
+    const baseKeywords = Array.from(new Set(rawKeywords.flatMap((w) => [w, normalizarPlural(w)])));
     if (descricaoMidia) {
       const ex = extrairKeywordsDeDescricao(descricaoMidia);
       for (const k of ex.keywords) baseKeywords.push(k);
@@ -219,7 +222,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     const keywords = expandirComSinonimos(baseKeywords);
     const { max: precoMax, baratoPrimeiro } = detectarFaixaPreco(text);
     const buscaProdutoSolicitada = intencaoCompra || !!precoMax || descricaoMidia != null ||
-      /\b(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|tornozeleira|piercing|joia|semi\s*joia|semijoia|presente|cat[aá]logo|modelo|op[cç][aã]o|op[cç][oõ]es|mostra|mostrar|ver\s+mais|dourad|prat|rose|masculin|feminin)\b/i.test(lowText);
+      /\b(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|bracelete|tornozeleira|piercing|joia|semi\s*joia|semijoia|presente|cat[aá]logo|modelo|op[cç][aã]o|op[cç][oõ]es|mostra|mostrar|ver\s+mais|dourad|prat|rose|masculin|feminin)\b/i.test(lowText);
 
     const { data: pedidosRecentes } = await supabaseAdmin.from("pedidos").select("produtos_ids").order("criado_em", { ascending: false }).limit(200);
     const contagemVendas = new Map<string, number>();
@@ -237,7 +240,11 @@ async function handleWebhook(request: Request): Promise<Response> {
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
-    if (produtos.length < 30) {
+    // Fallback geral só quando NÃO há keywords de categoria específica (evita misturar óculos/relógio com braceletes)
+    const temKeywordCategoria = keywords.some((k) =>
+      /^(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|bracelete|tornozeleira|piercing|conjunto|kit|trio|choker|gargantilha)$/.test(k)
+    );
+    if (produtos.length < 30 && !temKeywordCategoria) {
       let qy = supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
       if (generoFiltro) qy = (qy as any).in("genero", [generoFiltro, "unissex"]);
       if (precoMax) qy = (qy as any).lte("preco", precoMax);
