@@ -196,22 +196,28 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
 
     // Upsert conversa — evita race condition por mensagens paralelas
-    // Tenta encontrar conversa existente com formato antigo de JID antes do upsert
-    const { data: convAntiga } = await supabaseAdmin.from("conversas")
-      .select("*")
-      .or(`sessao_token.eq.${sessao_token},sessao_token.eq.wa:${remoteJid},sessao_token.like.wa:${numero}%`)
-      .maybeSingle();
-    if (convAntiga && convAntiga.sessao_token !== sessao_token) {
-      // Migrar o sessao_token para o formato normalizado
-      await supabaseAdmin.from("conversas").update({ sessao_token }).eq("id", convAntiga.id);
-    }
-    const { data: conversaUpsert } = await supabaseAdmin.from("conversas")
-      .upsert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" }, { onConflict: "sessao_token", ignoreDuplicates: true })
-      .select("*").maybeSingle();
-    let conversa: any = conversaUpsert;
+    // Primeiro tenta encontrar pelo token normalizado
+    let { data: conversa } = await supabaseAdmin.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle();
+
+    // Migração: tenta formatos antigos (com @s.whatsapp.net)
     if (!conversa) {
-      const { data: convExist } = await supabaseAdmin.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle();
-      conversa = convExist;
+      const tokensAntigos = [`wa:${numero}@s.whatsapp.net`, `wa:${remoteJid}`].filter(t => t !== sessao_token);
+      for (const tok of tokensAntigos) {
+        const { data: antiga } = await supabaseAdmin.from("conversas").select("*").eq("sessao_token", tok).maybeSingle();
+        if (antiga) {
+          await supabaseAdmin.from("conversas").update({ sessao_token }).eq("id", antiga.id);
+          conversa = { ...antiga, sessao_token };
+          break;
+        }
+      }
+    }
+
+    // Se ainda não existe, cria
+    if (!conversa) {
+      const { data: nova } = await supabaseAdmin.from("conversas")
+        .insert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" })
+        .select("*").maybeSingle();
+      conversa = nova;
     }
     if (!conversa) throw new Error("Falha ao criar/encontrar conversa");
 
