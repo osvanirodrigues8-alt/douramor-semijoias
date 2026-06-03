@@ -378,14 +378,12 @@ export function detectarFaixaPreco(texto: string): { max?: number; baratoPrimeir
 
 export function detectarPedidoHumano(texto: string, palavrasExtras: string[] = []): { sim: boolean; motivo?: string } {
   const t = texto.toLowerCase();
+  // Apenas pedidos EXPLÍCITOS de humano disparam pré-IA — reclamações/defeitos vão para a IA primeiro
   if (/\b(falar\s+com\s+(uma\s+)?(pessoa|humano|atendente|gerente|vendedor|responsável|responsavel)|atendimento\s+humano|quero\s+humano|chama\s+(algu[eé]m|uma\s+pessoa))\b/.test(t)) {
     return { sim: true, motivo: "Cliente pediu atendimento humano" };
   }
-  if (/\b(reclama[çc][aã]o|insatisfeit|p[eé]ssimo|horr[ií]vel|fraude|enganad|n[aã]o\s+chegou|quebrad|defeito|devolver|reembolso|estorno|cancelar\s+pedido)\b/.test(t)) {
-    return { sim: true, motivo: "Possível reclamação" };
-  }
   for (const p of palavrasExtras) {
-    if (p && t.includes(p.toLowerCase())) return { sim: true, motivo: `Palavra-chave: ${p}` };
+    if (p && p.length > 3 && t.includes(p.toLowerCase())) return { sim: true, motivo: `Palavra-chave: ${p}` };
   }
   return { sim: false };
 }
