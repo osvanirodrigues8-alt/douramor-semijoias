@@ -342,7 +342,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     const categoriaPrincipal = categoriasPedidas[0] ?? null;
 
     // Categorias que NÃO são semi joias — nunca aparecem no fallback
-    const categoriasExcluidas = ["relogio", "oculos", "outro"];
+    const categoriasExcluidas = ["outro"];
 
     let produtos: any[] = [];
     const selectProdutos = "id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id";
@@ -407,7 +407,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Filtrar produtos sem URL e excluir categorias não-semi joias antes de passar ao prompt
     const produtosParaPrompt = produtos
-      .filter((p) => (p.url_produto || p.url_foto) && !["relogio", "oculos", "outro"].includes(p.categoria))
+      .filter((p) => (p.url_produto || p.url_foto) && !["outro"].includes(p.categoria))
       .slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
