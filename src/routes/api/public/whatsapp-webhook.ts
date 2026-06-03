@@ -90,6 +90,13 @@ async function handleWebhook(request: Request): Promise<Response> {
       message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
     if (text) text = text.trim().slice(0, 4096);
 
+    // Extrair mensagem citada (quando o cliente arrasta e responde a uma mensagem anterior)
+    const contextInfo = message?.extendedTextMessage?.contextInfo ?? message?.contextInfo ?? data?.contextInfo ?? {};
+    const quotedMsg = contextInfo?.quotedMessage;
+    const quotedText: string | undefined =
+      quotedMsg?.conversation ?? quotedMsg?.extendedTextMessage?.text ?? quotedMsg?.imageMessage?.caption;
+    const quotedUrl = quotedText ? (quotedText.match(/https?:\/\/\S+/) ?? [])[0] : undefined;
+
     const imageUrl: string | undefined =
       message?.imageMessage?.url ?? data?.imageMessage?.url ?? data?.image?.url ?? data?.mediaUrl?.image;
     const legendaImg: string | undefined =
@@ -450,6 +457,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
       cepRecebidoAgora: !!cepNaMsg, categoriaPedida: categoriaPrincipal,
+      mensagemCitada: quotedText, urlCitada: quotedUrl,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)

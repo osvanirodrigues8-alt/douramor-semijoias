@@ -37,8 +37,10 @@ export function buildSystemPrompt(opts: {
   tentativasEscalar?: number;
   cepRecebidoAgora?: boolean;
   categoriaPedida?: string | null;
+  mensagemCitada?: string | null;
+  urlCitada?: string | null;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
@@ -192,7 +194,7 @@ UMA mensagem CURTA (1-2 frases máx). Não soe automática.`);
 Horário: ${horInicio} às ${horFim}.
 Pagamento: ${(cfg?.formas_pagamento_ativas ?? []).join(", ") || "PIX, cartão, link de pagamento"}.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Entrega: ${freteModo === "nuvemshop" ? "frete calculado pelo CEP" : Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS" : `R$ ${cfg.taxa_entrega}`}.
+Entrega: ${freteModo === "nuvemshop" ? "frete calculado pelo CEP da cliente" : Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS acima de R$200 — abaixo disso cobrar frete conforme CEP" : `R$ ${cfg.taxa_entrega}`}.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
@@ -228,6 +230,17 @@ ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
   if (faqs?.length) {
     blocos.push(`# FAQ\n${faqs.map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`).join("\n\n")}`);
+  }
+
+  if (mensagemCitada || urlCitada) {
+    const produtoCitado = urlCitada
+      ? (produtos ?? []).find((p: any) => p.url_produto && p.url_produto === urlCitada)
+      : null;
+    if (produtoCitado) {
+      blocos.push(`# PRODUTO CITADO PELA CLIENTE\nA cliente está se referindo a este produto específico que você enviou anteriormente:\n- ${produtoCitado.nome} — R$ ${produtoCitado.preco} — ${produtoCitado.url_produto}\nResponda sobre ESTE produto.`);
+    } else if (mensagemCitada) {
+      blocos.push(`# MENSAGEM CITADA PELA CLIENTE\nA cliente está respondendo a esta mensagem anterior: "${String(mensagemCitada).slice(0, 200)}"\nLeve isso em conta na sua resposta.`);
+    }
   }
 
   if (categoriaPedida) {
