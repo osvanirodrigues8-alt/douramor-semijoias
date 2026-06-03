@@ -105,8 +105,47 @@ export async function calcularFreteNuvemshop(params: {
     const variantId = await resolverVariantId(conn, itens[0]);
     if (!variantId) return { ok: false, erro: "Produto sem variante Nuvemshop para cotação." };
 
-    // A Nuvemshop não expõe cotação como endpoint da API Admin da loja; o próprio storefront usa /frete/.
-    // Chamamos o mesmo endpoint público da loja, com variant_id + CEP, e extraímos as opções retornadas.
+    // Usa a API Admin primeiro — retorna valores REAIS da transportadora sem aplicar promoções.
+    // O storefront /frete/ aplica regras de frete grátis e retorna R$0, o que é enganoso quando
+    // o cliente ainda não atingiu o valor mínimo para a promoção.
+    const adminUrl = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
+    const adminBody = {
+      items: itens.map((i) => ({ variant_id: Number(i.variant_id ?? variantId), quantity: i.quantity })),
+      shipping_address: { zipcode: cep.replace(/\D/g, "") },
+    };
+    const adminRes = await fetch(adminUrl, {
+      method: "POST",
+      headers: {
+        Authentication: `bearer ${conn.access_token}`,
+        "User-Agent": UA,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(adminBody),
+    });
+    const adminTxt = await adminRes.text();
+    if (adminRes.ok) {
+      let adminJson: any;
+      try { adminJson = JSON.parse(adminTxt); } catch { adminJson = null; }
+      if (adminJson) {
+        const lista: any[] = Array.isArray(adminJson) ? adminJson
+          : (adminJson?.rates ?? adminJson?.shipping_options ?? adminJson?.options ?? []);
+        const opcoes: OpcaoFrete[] = lista.map((r: any) => ({
+          nome: String(r.name ?? r.shipping_name ?? r.title ?? r.carrier ?? "Frete"),
+          preco: Number(r.price ?? r.cost ?? r.amount ?? 0),
+          prazo_dias: r.delivery_time != null ? Number(r.delivery_time) : r.days != null ? Number(r.days) : null,
+          chega: null,
+        })).filter((o) => o.preco >= 0 && o.nome);
+        if (opcoes.length) {
+          opcoes.sort((a, b) => a.preco - b.preco);
+          return { ok: true, opcoes: opcoes.slice(0, 4) };
+        }
+      }
+      console.error("[frete-ns-admin] sem opções", adminTxt.slice(0, 400));
+    } else {
+      console.error("[frete-ns-admin] status", adminRes.status, adminTxt.slice(0, 400));
+    }
+
+    // Fallback: storefront /frete/ (retorna preço promocional, mas é melhor que nada)
     const base = lojaBase(conn, itens[0].product_url) ?? "https://www.douramor.com.br";
     const form = new URLSearchParams({
       cep: cep.replace(/\D/g, ""),
@@ -114,7 +153,6 @@ export async function calcularFreteNuvemshop(params: {
       quantity: String(Math.max(1, itens[0].quantity || 1)),
       originShippingCalculation: "productDetail",
     });
-
     const storefrontRes = await fetch(`${base}/frete/`, {
       method: "POST",
       headers: {
@@ -136,50 +174,9 @@ export async function calcularFreteNuvemshop(params: {
           return { ok: true, opcoes: opcoesStorefront.slice(0, 4) };
         }
       }
-      console.error("[frete-ns-storefront] sem opções", storefrontTxt.slice(0, 400));
-    } else {
-      console.error("[frete-ns-storefront] status", storefrontRes.status, storefrontTxt.slice(0, 400));
     }
 
-    const url = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
-    const body = {
-      items: itens.map((i) => ({ variant_id: Number(i.variant_id ?? variantId), quantity: i.quantity })),
-      shipping_address: { zipcode: cep.replace(/\D/g, "") },
-    };
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authentication: `bearer ${conn.access_token}`,
-        "User-Agent": UA,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    const txt = await res.text();
-    if (!res.ok) {
-      console.error("[frete-ns] status", res.status, txt.slice(0, 400));
-      return { ok: false, erro: `Nuvemshop ${res.status}: ${txt.slice(0, 200)}` };
-    }
-    let json: any;
-    try { json = JSON.parse(txt); } catch { return { ok: false, erro: "Resposta inválida da Nuvemshop." }; }
-
-    // Resposta pode vir em formatos: array direto, ou { rates: [...] }, ou { shipping_options: [...] }
-    const lista: any[] = Array.isArray(json) ? json
-      : (json?.rates ?? json?.shipping_options ?? json?.options ?? []);
-
-    const opcoes: OpcaoFrete[] = lista.map((r: any) => ({
-      nome: String(r.name ?? r.shipping_name ?? r.title ?? r.carrier ?? "Frete"),
-      preco: Number(r.price ?? r.cost ?? r.amount ?? 0),
-      prazo_dias: r.delivery_time != null ? Number(r.delivery_time)
-        : r.days != null ? Number(r.days)
-        : r.min_delivery_date && r.max_delivery_date ? null
-        : null,
-    })).filter((o) => o.preco >= 0 && o.nome);
-
-    if (!opcoes.length) return { ok: false, erro: "Nenhuma opção de frete retornada." };
-    // Ordena do mais barato pro mais caro
-    opcoes.sort((a, b) => a.preco - b.preco);
-    return { ok: true, opcoes: opcoes.slice(0, 4) };
+    return { ok: false, erro: "Não foi possível calcular o frete." };
   } catch (e) {
     console.error("[frete-ns] exception", e);
     return { ok: false, erro: (e as Error).message };
