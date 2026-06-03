@@ -194,7 +194,7 @@ UMA mensagem CURTA (1-2 frases máx). Não soe automática.`);
 Horário: ${horInicio} às ${horFim}.
 Pagamento: ${(cfg?.formas_pagamento_ativas ?? []).join(", ") || "PIX, cartão, link de pagamento"}.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Entrega: ${freteModo === "nuvemshop" ? "frete calculado pelo CEP da cliente" : Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS acima de R$200 — abaixo disso cobrar frete conforme CEP" : `R$ ${cfg.taxa_entrega}`}.
+Entrega: ${freteModo === "nuvemshop" ? "frete calculado pelo CEP da cliente — NUNCA invente valores, SEMPRE peça o CEP primeiro" : Number(cfg?.taxa_entrega ?? 0) === 0 ? "FRETE GRÁTIS para todo o Brasil" : `R$ ${cfg.taxa_entrega}`}.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
 
@@ -217,7 +217,7 @@ ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
   } else if (freteModo === "manual") {
     blocos.push(`# FRETE\nFrete fixo R$ ${cfg?.taxa_entrega ?? 0}. Mencione quando relevante.`);
   } else {
-    blocos.push(`# FRETE\nQuando perguntarem sobre entrega, peça o CEP: "Me passa seu CEP que já calculo pra você 💛".`);
+    blocos.push(`# FRETE — REGRA ABSOLUTA\nNUNCA invente, estime ou chute valores de frete (nem R$10, nem R$25, nem faixas). SEMPRE que perguntarem sobre frete, entrega, SEDEX, PAC, prazo ou transportadora, peça o CEP: "Me passa seu CEP que já calculo o valor exato pra você 💛". Só informe o frete após receber e calcular pelo CEP.`);
   }
 
   if (palavrasProibidas || topicosProibidos) {

@@ -11,7 +11,7 @@ export function extrairCep(texto: string): string | null {
 
 export function detectaIntencaoFrete(texto: string): boolean {
   const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return /(frete|entrega|envio|chega(r)?\s+em|prazo|quanto.*(?:mandar|enviar)|cep)/.test(t);
+  return /(frete|entrega|envio|chega(r)?(\s+em)?|prazo|quanto.*(?:mandar|enviar|frete|entreg)|sedex|pac\b|correios|transportadora|cep|demora\s+(pra|para)\s+chegar|dias\s+(uteis|pra))/.test(t);
 }
 
 type Conn = { store_id: string; access_token: string; dominio_loja?: string | null };
