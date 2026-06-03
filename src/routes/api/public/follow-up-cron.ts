@@ -6,7 +6,7 @@ import {
   calcularProximoFollowup,
   dentroDoHorario,
   detectarTemperatura,
-} from "../../../../supabase/functions/_shared/prompt";
+} from "@/lib/shared/prompt";
 
 const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
 
