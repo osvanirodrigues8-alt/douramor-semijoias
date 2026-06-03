@@ -30,7 +30,7 @@ type Connection = {
   ultimo_webhook_status: string | null;
 };
 
-const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nuvemshop-webhook`;
+const WEBHOOK_URL = `${typeof window !== "undefined" ? window.location.origin : "https://douramor-semijoias.vercel.app"}/api/public/hooks/sync-nuvemshop-products`;
 
 function NuvemshopIntegracao() {
   const [conn, setConn] = useState<Connection | null>(null);
