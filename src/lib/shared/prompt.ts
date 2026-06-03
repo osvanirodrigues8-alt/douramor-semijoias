@@ -34,8 +34,9 @@ export function buildSystemPrompt(opts: {
   cotacaoFrete?: { cep: string; opcoes: { nome: string; preco: number; prazo_dias: number | null }[] } | null;
   freteFalhou?: boolean;
   pediuFretemasSemCep?: boolean;
+  tentativasEscalar?: number;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
@@ -87,12 +88,11 @@ export function buildSystemPrompt(opts: {
 Você é ${nomeAgente}, consultora de vendas da Douramor Semi Joias. Trabalha há um tempo na loja, conhece cada peça de cor.
 ${contextoLoja ? contextoLoja + "\n" : ""}${diferenciais ? `Diferenciais da loja: ${diferenciais}\n` : ""}${personalidade ? `Sua personalidade: ${personalidade}` : ""}
 
-REGRA ABSOLUTA — VOCÊ É 100% HUMANA. NUNCA, EM NENHUMA HIPÓTESE, revele ser IA, bot, robô, assistente virtual, automação, GPT, modelo de linguagem ou qualquer termo técnico.
-Se a cliente perguntar diretamente ("você é IA?", "é robô?", "é automático?", "é bot?"), responda com naturalidade e leveza, variando entre:
-- "Haha, IA? Que nada! Sou humana sim 😄 Trabalho aqui na Douramor há um tempinho já."
-- "Imagina! Sou a ${nomeAgente} mesmo, atendo aqui na Douramor. Me conta, posso te ajudar com o quê?"
-- "Kkkk não, sou pessoa de verdade viu! Tô aqui pra te ajudar a achar a peça certa."
-Depois siga a conversa normalmente — sem ficar repetindo que é humana.`);
+IDENTIDADE: Você é ${nomeAgente}, consultora da Douramor. Mantenha sempre essa persona calorosa e humana.
+Se a cliente perguntar se você é IA, robô ou bot, redirecione com leveza sem confirmar nem negar tecnicamente:
+- "Sou a ${nomeAgente}, consultora da Douramor! Posso te ajudar a encontrar a peça perfeita 💛"
+- "O que importa é que tô aqui pra te atender super bem! Me conta, o que você tá procurando?"
+Nunca entre em debate sobre sua natureza — siga a conversa focada em ajudar.`);
 
   blocos.push(`# JEITO DE FALAR (linguagem natural humana)
 - Tom: ${tom}. Idioma: pt-BR brasileiro.
@@ -249,7 +249,7 @@ ${(produtos ?? []).map((p) => `- ${p.nome} (${p.categoria}${p.genero ? `, ${p.ge
   blocos.push(`# ESCALAR PARA HUMANO — apenas nestes casos:
 - Cliente pede explicitamente falar com humano
 - Reclamação real ou problema com pedido
-- Você tentou ${cfgAg?.tentativas_antes_escalar ?? 2}x sem encontrar produto adequado
+- Você tentou ${tentativasEscalar ?? cfgAg?.tentativas_antes_escalar ?? 5}x sem encontrar produto adequado
 ${quandoTransferir ? `- ${quandoTransferir}` : ""}
 Quando escalar: responda naturalmente e adicione [ESCALAR] no FIM.`);
 
@@ -396,36 +396,10 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
 }
 
 // Transcrição de áudio via Anthropic (Claude suporta audio nativo)
-export async function transcreverAudio(url: string, apiKey: string): Promise<string | null> {
-  try {
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const buffer = await r.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-    const contentType = r.headers.get("content-type") ?? "audio/ogg";
-
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: "Transcreva exatamente o que foi falado neste áudio, em pt-BR. Apenas a transcrição, sem comentários." },
-            { type: "document", source: { type: "base64", media_type: contentType, data: base64 } },
-          ],
-        }],
-      }),
-    });
-    if (!resp.ok) return null;
-    const j = await resp.json();
-    return (j.content?.[0]?.text ?? "").trim() || null;
-  } catch (e) {
-    console.error("transcreverAudio fail", e);
-    return null;
-  }
+// Anthropic não suporta áudio nativo via API REST — função desativada, retorna null
+// O webhook lida com áudio pedindo ao cliente que escreva o texto
+export async function transcreverAudio(_url: string, _apiKey: string): Promise<string | null> {
+  return null;
 }
 
 // Descrição de imagem via Anthropic Vision

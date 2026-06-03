@@ -24,7 +24,7 @@ async function handleChat(request: Request): Promise<Response> {
     if (!cfg) throw new Error("Configurações não encontradas");
 
     const [{ data: produtos }, { data: cupons }, { data: faqs }] = await Promise.all([
-      supabaseAdmin.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status").eq("status", "disponivel").limit(40),
+      supabaseAdmin.from("produtos").select("nome,categoria,preco,descricao,quantidade_estoque,status,url_produto,url_foto").eq("status", "disponivel").limit(40),
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);

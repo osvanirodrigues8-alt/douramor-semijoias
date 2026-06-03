@@ -9,7 +9,6 @@ import {
   detectarIntencaoCompra,
   detectarTipoConversa,
   detectarTemperatura,
-  transcreverAudio,
   descreverImagem,
   extrairKeywordsDeDescricao,
 } from "@/lib/shared/prompt";
@@ -19,6 +18,7 @@ import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvem
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
 const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar pessoalmente 🙏";
 const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
+const TENTATIVAS_ESCALAR_DEFAULT = 5;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -51,11 +51,19 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: stevoKey },
     body: JSON.stringify({ number: numero, text }),
-  });
+    signal: AbortSignal.timeout(8000),
+  }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
 async function handleWebhook(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+
+  // Validar STEVO_API_KEY no início
+  const stevoKey = process.env.STEVO_API_KEY;
+  if (!stevoKey) {
+    console.error("[webhook] STEVO_API_KEY não configurada");
+    return new Response(JSON.stringify({ error: "misconfigured" }), { status: 500, headers: cors });
+  }
 
   const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET;
   if (webhookSecret) {
@@ -66,7 +74,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
   try {
     const payload = await request.json().catch(() => ({}));
-    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 1500));
+    console.log("[stevo-webhook] payload:", JSON.stringify(payload).slice(0, 800));
 
     const data = payload?.data ?? payload;
     const key = data?.key ?? {};
@@ -75,34 +83,41 @@ async function handleWebhook(request: Request): Promise<Response> {
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
     const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
+
+    // Extrair e limpar texto
     let text: string | undefined =
       message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
+    if (text) text = text.trim().slice(0, 4096);
 
-    const audioUrl: string | undefined =
-      message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
     const imageUrl: string | undefined =
       message?.imageMessage?.url ?? data?.imageMessage?.url ?? data?.image?.url ?? data?.mediaUrl?.image;
     const legendaImg: string | undefined =
       message?.imageMessage?.caption ?? data?.imageMessage?.caption ?? data?.caption;
 
-    let midiaTipo: "audio" | "image" | null = null;
+    let midiaTipo: "image" | null = null;
     let midiaUrl: string | null = null;
     let midiaTranscricao: string | null = null;
     let descricaoMidia: string | null = null;
 
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 
+    // Áudio: Anthropic não suporta áudio nativamente — solicitar texto ao usuário
+    const audioUrl: string | undefined =
+      message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
     if (!text && audioUrl) {
-      midiaTipo = "audio"; midiaUrl = audioUrl;
-      const tr = await transcreverAudio(audioUrl, ANTHROPIC_KEY);
-      if (tr) { text = tr; midiaTranscricao = tr; }
+      if (remoteJid) {
+        const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
+        await enviarTexto(numero, MSG_AUDIO_FAIL, stevoKey);
+      }
+      return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
+
     if (!text && imageUrl) {
       midiaTipo = "image"; midiaUrl = imageUrl;
       const desc = await descreverImagem(imageUrl, ANTHROPIC_KEY);
       midiaTranscricao = desc;
       descricaoMidia = desc;
-      text = legendaImg || `[imagem: ${desc ?? "joia"}]`;
+      text = legendaImg?.trim() || `[imagem: ${desc ?? "joia"}]`;
     }
 
     if (!remoteJid) {
@@ -111,60 +126,93 @@ async function handleWebhook(request: Request): Promise<Response> {
     if (remoteJid.includes("@g.us") || info?.IsGroup === true) {
       return new Response(JSON.stringify({ ok: true, ignored: "group" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
+
+    // Normalizar número e sessao_token pelo número (não pelo JID completo — evita fragmentação por dispositivo)
     const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
+    const sessao_token = `wa:${numero}`;
 
     if (fromMe) {
       if (!text) return new Response(JSON.stringify({ ok: true, ignored: "fromMe sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
-      const sessao_token = `wa:${remoteJid}`;
-      let { data: conv } = await supabaseAdmin.from("conversas").select("id, cliente_id").eq("sessao_token", sessao_token).maybeSingle();
-      if (!conv) {
-        const { data: existing } = await supabaseAdmin.from("clientes").select("id").eq("contato", numero).maybeSingle();
-        const cliId = existing?.id ?? (await supabaseAdmin.from("clientes").insert({ contato: numero, canal_origem: "whatsapp" }).select("id").single()).data?.id;
-        const { data: nova } = await supabaseAdmin.from("conversas").insert({ sessao_token, canal: "whatsapp", cliente_id: cliId, tipo_conversa: "receptivo" }).select("id, cliente_id").single();
-        conv = nova!;
-      }
-      const { data: ultimaAssistente } = await supabaseAdmin.from("mensagens").select("conteudo").eq("conversa_id", conv.id).eq("papel", "assistant").order("criado_em", { ascending: false }).limit(1).maybeSingle();
-      if (String(ultimaAssistente?.conteudo ?? "").trim() === text.trim()) {
-        return new Response(JSON.stringify({ ok: true, ignored: "eco" }), { headers: { ...cors, "Content-Type": "application/json" } });
-      }
+
+      // Buscar conversa existente
+      const { data: conv } = await supabaseAdmin.from("conversas").select("id, precisa_humano").eq("sessao_token", sessao_token).maybeSingle();
+      if (!conv) return new Response(JSON.stringify({ ok: true, ignored: "fromMe sem conversa" }), { headers: { ...cors, "Content-Type": "application/json" } });
+
+      // Verificar eco: texto já existe como mensagem da IA nos últimos 60s
+      const umMinutoAtras = new Date(Date.now() - 60000).toISOString();
+      const { data: recentes } = await supabaseAdmin.from("mensagens")
+        .select("conteudo")
+        .eq("conversa_id", conv.id)
+        .eq("papel", "assistant")
+        .gte("criado_em", umMinutoAtras);
+      const isEco = (recentes ?? []).some((m: any) => String(m.conteudo ?? "").trim() === text!.trim() || String(m.conteudo ?? "").includes(text!.trim()));
+      if (isEco) return new Response(JSON.stringify({ ok: true, ignored: "eco" }), { headers: { ...cors, "Content-Type": "application/json" } });
+
+      // Registrar mensagem do atendente humano
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: text });
-      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Atendimento humano manual", humano_em: new Date().toISOString() }).eq("id", conv.id);
+      // Só pausar o bot se ainda não estava pausado (evita sobrescrever humano_em original)
+      if (!conv.precisa_humano) {
+        await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Atendimento humano manual", humano_em: new Date().toISOString() }).eq("id", conv.id);
+      }
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    if (!text && midiaTipo === "audio") {
-      await fetch(STEVO_URL, { method: "POST", headers: { "Content-Type": "application/json", apikey: process.env.STEVO_API_KEY ?? "" }, body: JSON.stringify({ number: numero, text: MSG_AUDIO_FAIL }) });
-      return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
-    }
     if (!text) return new Response(JSON.stringify({ ok: true, ignored: "sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
+    // Carregar configurações — sempre a row mais recente
     const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
-      supabaseAdmin.from("configuracoes").select("*").limit(1).maybeSingle(),
-      supabaseAdmin.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes").select("*").order("criado_em", { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from("configuracoes_agente").select("*").order("criado_em", { ascending: false }).limit(1).maybeSingle(),
     ]);
     if (!cfg) throw new Error("Configurações não encontradas");
 
-    let cliente: any = null;
-    const { data: existing } = await supabaseAdmin.from("clientes").select("*").eq("contato", numero).maybeSingle();
-    if (existing) {
-      cliente = existing;
-      if (!cliente.nome && pushName) {
-        await supabaseAdmin.from("clientes").update({ nome: pushName }).eq("id", cliente.id);
-        cliente.nome = pushName;
-      }
-    } else {
-      const { data: novo } = await supabaseAdmin.from("clientes").insert({ contato: numero, canal_origem: "whatsapp", nome: pushName ?? null }).select("*").single();
-      cliente = novo;
+    // Upsert cliente — evita race condition e duplicatas
+    const { data: clienteUpsert } = await supabaseAdmin.from("clientes")
+      .upsert({ contato: numero, canal_origem: "whatsapp", nome: pushName ?? undefined }, { onConflict: "contato", ignoreDuplicates: false })
+      .select("*").maybeSingle();
+    let cliente: any = clienteUpsert;
+    if (!cliente) {
+      const { data: cliExist } = await supabaseAdmin.from("clientes").select("*").eq("contato", numero).maybeSingle();
+      cliente = cliExist;
+    }
+    if (cliente && !cliente.nome && pushName) {
+      await supabaseAdmin.from("clientes").update({ nome: pushName }).eq("id", cliente.id);
+      cliente.nome = pushName;
     }
 
-    const sessao_token = `wa:${remoteJid}`;
-    let { data: conversa } = await supabaseAdmin.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle();
+    // Upsert conversa — evita race condition por mensagens paralelas
+    const { data: conversaUpsert } = await supabaseAdmin.from("conversas")
+      .upsert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" }, { onConflict: "sessao_token", ignoreDuplicates: true })
+      .select("*").maybeSingle();
+    let conversa: any = conversaUpsert;
     if (!conversa) {
-      const { data: nova } = await supabaseAdmin.from("conversas").insert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id }).select("*").single();
-      conversa = nova!;
+      const { data: convExist } = await supabaseAdmin.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle();
+      conversa = convExist;
+    }
+    if (!conversa) throw new Error("Falha ao criar/encontrar conversa");
+
+    // --- BUSCAR HISTÓRICO ANTES DE INSERIR MENSAGEM DO USUÁRIO ---
+    const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: histRaw } = await supabaseAdmin.from("mensagens")
+      .select("papel, conteudo, criado_em")
+      .eq("conversa_id", conversa.id)
+      .gte("criado_em", seteDiasAtras)
+      .order("criado_em", { ascending: true })
+      .limit(50);
+    // Garantir ao menos as últimas 10 mensagens independente de data
+    let hist = histRaw ?? [];
+    if (hist.length < 5) {
+      const { data: recent } = await supabaseAdmin.from("mensagens")
+        .select("papel, conteudo, criado_em")
+        .eq("conversa_id", conversa.id)
+        .order("criado_em", { ascending: false })
+        .limit(10);
+      hist = (recent ?? []).reverse();
     }
 
-    await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao });
+    // Agora inserir a mensagem do usuário
+    const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao });
+    if (errMsgUser) console.error("[mensagens insert user]", errMsgUser);
 
     await supabaseAdmin.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
     await supabaseAdmin.from("conversas").update({ fups_enviados_hoje: 0, dia_followup_atual: 0, proximo_followup_em: null, data_inicio_followup: null }).eq("id", conversa.id);
@@ -173,26 +221,26 @@ async function handleWebhook(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ ok: true, pausada_humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    // Detecção de pedido humano com word boundary nas palavras extras
     const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
     const pedidoHumano = detectarPedidoHumano(text, palavrasExtras);
     if (pedidoHumano.sim) {
       await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString() }).eq("id", conversa.id);
-      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
-      await fetch(STEVO_URL, { method: "POST", headers: { "Content-Type": "application/json", apikey: process.env.STEVO_API_KEY ?? "" }, body: JSON.stringify({ number: numero, text: MSG_HUMANO }) });
+      const { error: errEsc } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
+      if (errEsc) console.error("[mensagens insert escalar]", errEsc);
+      const resp = await enviarTexto(numero, MSG_HUMANO, stevoKey);
+      if (!resp.ok) console.error("[stevo-send escalar]", resp.status);
       return new Response(JSON.stringify({ ok: true, humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     const intencaoCompra = detectarIntencaoCompra(text);
     if (intencaoCompra) await supabaseAdmin.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
 
-    const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: hist } = await supabaseAdmin.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversa.id).gte("criado_em", seteDiasAtras).order("criado_em", { ascending: true }).limit(50);
-
     const fluxoVariaveis = ((conversa.contexto as any)?.fluxo?.variaveis ?? {}) as Record<string, any>;
     const fluxoResult = await executarFluxo({
       supabase: supabaseAdmin as any, conversa, cliente, cfg, cfgAg,
       mensagemUsuario: text, canal: "whatsapp",
-      hist: hist ?? [], variaveis: fluxoVariaveis, aiKey: ANTHROPIC_KEY,
+      hist, variaveis: fluxoVariaveis, aiKey: ANTHROPIC_KEY,
     });
     if (fluxoResult.handled) {
       const replyFluxo = fluxoResult.reply ?? MSG_HUMANO;
@@ -200,19 +248,26 @@ async function handleWebhook(request: Request): Promise<Response> {
       if (fluxoResult.escalar) { update.precisa_humano = true; update.motivo_humano = fluxoResult.motivoEscalar ?? "fluxo escalou"; update.humano_em = new Date().toISOString(); }
       if (Object.keys(update).length) await supabaseAdmin.from("conversas").update(update).eq("id", conversa.id);
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: replyFluxo });
-      const sendResp = await fetch(STEVO_URL, { method: "POST", headers: { "Content-Type": "application/json", apikey: process.env.STEVO_API_KEY ?? "" }, body: JSON.stringify({ number: numero, text: replyFluxo }) });
+      const sendResp = await enviarTexto(numero, replyFluxo, stevoKey);
       return new Response(JSON.stringify({ ok: true, fluxo: true, sent: sendResp.ok }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     const instrucaoExtraFluxo: string | undefined = ((conversa.contexto as any)?.fluxo?.variaveis as any)?.__ia_instrucao__ ?? fluxoVariaveis.__ia_instrucao__;
 
+    // Extração de keywords com normalização de plural
     const stop = new Set(["para","sobre","tem","tens","temos","voce","você","vocês","quero","queria","gostaria","linha","produto","produtos","com","sem","uma","umas","uns","dos","das","tudo","bem","oque","que","qual","quais","como","onde","quando","quanto","alguma","algum","mais","menos","aqui","obrigado","obrigada","oi","ola","olá","reais","preco","preço"]);
     const lowText = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     const generoFiltro: "masculino" | "feminino" | "unissex" | null =
       /\b(masculin|homem|homens|menino|namorado|marido|esposo|pai|filho)\b/.test(lowText) ? "masculino" :
       /\b(feminin|mulher|mulheres|menina|namorada|esposa|mae|mãe|filha)\b/.test(lowText) ? "feminino" : null;
 
-    // Normaliza plural simples: remove 's' final para melhor matching (ex: "braceletes" → "bracelete")
-    const normalizarPlural = (w: string) => w.replace(/([aeiou])s$/, "$1").replace(/es$/, "e").replace(/s$/, "");
+    // Dicionário de plurais conhecidos de semi joias
+    const pluraisJoias: Record<string, string> = {
+      braceletes: "bracelete", aneis: "anel", brincos: "brinco", colares: "colar",
+      correntes: "corrente", pulseiras: "pulseira", tornozeleiras: "tornozeleira",
+      aliancas: "alianca", aliancas: "alianca", conjuntos: "conjunto", piercings: "piercing",
+      argolas: "argola", gargantilhas: "gargantilha", chokers: "choker",
+    };
+    const normalizarPlural = (w: string): string => pluraisJoias[w] ?? (w.length > 5 ? w.replace(/([aeiou])s$/, "$1") : w);
     const rawKeywords = (lowText.match(/[a-z0-9]{4,}/g) ?? []).filter((w) => !stop.has(w)).slice(0, 8);
     const baseKeywords = Array.from(new Set(rawKeywords.flatMap((w) => [w, normalizarPlural(w)])));
     if (descricaoMidia) {
@@ -224,7 +279,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     const buscaProdutoSolicitada = intencaoCompra || !!precoMax || descricaoMidia != null ||
       /\b(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|bracelete|tornozeleira|piercing|joia|semi\s*joia|semijoia|presente|cat[aá]logo|modelo|op[cç][aã]o|op[cç][oõ]es|mostra|mostrar|ver\s+mais|dourad|prat|rose|masculin|feminin)\b/i.test(lowText);
 
-    const { data: pedidosRecentes } = await supabaseAdmin.from("pedidos").select("produtos_ids").order("criado_em", { ascending: false }).limit(200);
+    // Pedidos recentes (últimos 30 dias para não fazer full table scan)
+    const trintaDiasAtras = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: pedidosRecentes } = await supabaseAdmin.from("pedidos").select("produtos_ids").gte("criado_em", trintaDiasAtras).order("criado_em", { ascending: false }).limit(200);
     const contagemVendas = new Map<string, number>();
     for (const p of pedidosRecentes ?? []) for (const id of (p.produtos_ids ?? []) as string[]) contagemVendas.set(id, (contagemVendas.get(id) ?? 0) + 1);
 
@@ -240,9 +297,9 @@ async function handleWebhook(request: Request): Promise<Response> {
       const { data: matched } = await qy;
       produtos = matched ?? [];
     }
-    // Fallback geral só quando NÃO há keywords de categoria específica (evita misturar óculos/relógio com braceletes)
+    // Fallback geral só quando NÃO há keywords de categoria específica
     const temKeywordCategoria = keywords.some((k) =>
-      /^(anel|alian[çc]a|colar|corrente|cord[aã]o|brinco|argola|pulseira|bracelete|tornozeleira|piercing|conjunto|kit|trio|choker|gargantilha)$/.test(k)
+      /^(anel|alianca|colar|corrente|cordao|brinco|argola|pulseira|bracelete|tornozeleira|piercing|conjunto|kit|trio|choker|gargantilha)$/.test(k)
     );
     if (produtos.length < 30 && !temKeywordCategoria) {
       let qy = supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id").eq("status", "disponivel").order("atualizado_em", { ascending: false }).limit(40);
@@ -260,27 +317,29 @@ async function handleWebhook(request: Request): Promise<Response> {
       const va = contagemVendas.get(a.id) ?? 0;
       const vb = contagemVendas.get(b.id) ?? 0;
       if (vb !== va) return vb - va;
-      return baratoPrimeiro ? Number(a.preco) - Number(b.preco) : Number(a.preco) - Number(b.preco);
+      // Corrigido: baratoPrimeiro inverte a ordem corretamente
+      return baratoPrimeiro ? Number(a.preco) - Number(b.preco) : Number(b.preco) - Number(a.preco);
     });
 
-    const produtosParaPrompt = produtos.slice(0, 30);
+    // Filtrar produtos sem URL antes de passar ao prompt
+    const produtosParaPrompt = produtos.filter((p) => p.url_produto || p.url_foto).slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
 
-    const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist ?? []);
-    if (!conversa.tipo_conversa || conversa.tipo_conversa !== tipoConv) {
+    const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist);
+    if (!conversa.tipo_conversa) {
       await supabaseAdmin.from("conversas").update({ tipo_conversa: tipoConv }).eq("id", conversa.id);
     }
-    const temp = detectarTemperatura(hist ?? []);
+    const temp = detectarTemperatura(hist);
 
     const cupomCfgAtivo = cfgAg?.cupom_negociacao_ativo !== false;
     const cupomReuso = cfgAg?.cupom_permite_reuso === true;
     const cupomTentMin = Number(cfgAg?.cupom_tentativas_antes ?? 1);
-    const userMsgs = (hist ?? []).filter((m: any) => m.papel === "user").length;
-    const assistantMsgs = (hist ?? []).filter((m: any) => m.papel === "assistant").length;
+    const userMsgs = hist.filter((m: any) => m.papel === "user").length;
+    const assistantMsgs = hist.filter((m: any) => m.papel === "assistant").length;
     const objecaoPreco = /\b(caro|car[ií]ssim|or[çc]ament|n[aã]o\s+posso|sem\s+grana|desconto|abaix|baix|melhor\s+pre[çc]o)\b/i.test(text);
     const jaOferecido = !!cliente?.cupom_negociacao_oferecido_em;
     const jaUsouCupom = cliente?.cupom_negociacao_usado === true;
@@ -304,6 +363,7 @@ async function handleWebhook(request: Request): Promise<Response> {
         const conn = await carregarConexaoNS(supabaseAdmin as any);
         if (!conn) {
           cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+          freteFalhou = true;
         } else {
           const candidatos = produtos.filter((p) => p.nuvemshop_variant_id || p.nuvemshop_product_id).slice(0, 1);
           if (!candidatos.length) {
@@ -315,36 +375,70 @@ async function handleWebhook(request: Request): Promise<Response> {
               if (cepNaMsg) {
                 await Promise.all([
                   supabaseAdmin.from("clientes").update({ cep: cepUsar }).eq("id", cliente.id),
-                  supabaseAdmin.from("conversas").update({ contexto: { ...(conversa.contexto ?? {}), cep: cepUsar } }).eq("id", conversa.id),
+                  supabaseAdmin.from("conversas").update({ contexto: { ...(typeof conversa.contexto === "object" && conversa.contexto !== null ? conversa.contexto : {}), cep: cepUsar } }).eq("id", conversa.id),
                 ]);
               }
             } else {
               cotacaoFrete = { cep: cepUsar, opcoes: opcaoFallback };
+              freteFalhou = true;
             }
           }
         }
       }
     }
 
+    const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? TENTATIVAS_ESCALAR_DEFAULT);
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
-      cotacaoFrete, freteFalhou, pediuFretemasSemCep,
+      cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
     });
 
-    const userMessages = (hist ?? []).filter((m: any) => m.papel === "user" || m.papel === "assistant").map((m: any) => ({ role: m.papel, content: m.conteudo }));
+    // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
+    const historicoMessages = hist
+      .filter((m: any) => m.papel === "user" || m.papel === "assistant")
+      .map((m: any) => ({ role: m.papel as "user" | "assistant", content: String(m.conteudo ?? "") }));
 
-    const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: userMessages }),
-    });
+    // Garantir que o array termina com a msg do usuário atual (não duplicada)
+    const messagesParaIA = [...historicoMessages, { role: "user" as const, content: text }];
+
+    // Chamar Anthropic com timeout de 25s
+    const ac = new AbortController();
+    const aiTimer = setTimeout(() => ac.abort(), 25000);
+    let aiResp: Response;
+    try {
+      aiResp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: messagesParaIA }),
+        signal: ac.signal,
+      });
+    } catch (e: any) {
+      clearTimeout(aiTimer);
+      if (e.name === "AbortError") {
+        console.error("[webhook] Anthropic timeout");
+        await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
+        await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Timeout da IA", humano_em: new Date().toISOString() }).eq("id", conversa.id);
+        await enviarTexto(numero, MSG_HUMANO, stevoKey);
+        return new Response(JSON.stringify({ ok: true, timeout: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+      throw e;
+    }
+    clearTimeout(aiTimer);
 
     if (!aiResp.ok) throw new Error(`AI ${aiResp.status}`);
     const ai = await aiResp.json();
     let reply: string = (ai.content?.[0]?.text ?? "").trim();
-    if (!reply) reply = MSG_HUMANO;
+
+    // IA retornou vazio — escalar para humano
+    if (!reply) {
+      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
+      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "IA retornou resposta vazia", humano_em: new Date().toISOString() }).eq("id", conversa.id);
+      await enviarTexto(numero, MSG_HUMANO, stevoKey);
+      return new Response(JSON.stringify({ ok: true, ia_vazia: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     let marcarHumano = false;
     let motivoEscalar: string | null = null;
@@ -362,8 +456,8 @@ async function handleWebhook(request: Request): Promise<Response> {
       if (hit) { novosMostrados.add(p.nome); novosVistosIds.add(p.id); }
     }
     const adicionouAlgum = novosMostrados.size > jaMostrados.length;
-    const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? 10);
-    const novaTentativaSemResultado = adicionouAlgum ? 0 : buscaProdutoSolicitada ? (conversa.tentativas_sem_resultado ?? 0) + 1 : 0;
+    // Resetar tentativas quando produtos foram encontrados no banco (mesmo se já mostrados)
+    const novaTentativaSemResultado = (buscaProdutoSolicitada && produtos.length > 0) ? 0 : buscaProdutoSolicitada ? (conversa.tentativas_sem_resultado ?? 0) + 1 : conversa.tentativas_sem_resultado ?? 0;
     if (buscaProdutoSolicitada && !adicionouAlgum && novaTentativaSemResultado >= tentativasMax) {
       marcarHumano = true;
       motivoEscalar = motivoEscalar ?? "Juliana não encontrou produto adequado";
@@ -373,39 +467,49 @@ async function handleWebhook(request: Request): Promise<Response> {
     const novosInteresseIds = new Set<string>((cliente.produtos_interesse ?? []) as string[]);
     if (intencaoCompra) for (const id of novosVistosIds) novosInteresseIds.add(id);
 
+    // Inserir mensagem assistente separado dos updates de metadados
+    const { error: errMsgAss } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
+    if (errMsgAss) console.error("[mensagens insert assistant]", errMsgAss);
+
+    // Updates de metadados (best-effort)
     await Promise.all([
       supabaseAdmin.from("conversas").update({
         produtos_mostrados: Array.from(novosMostrados),
         tentativas_sem_resultado: novaTentativaSemResultado,
         ...(marcarHumano ? { precisa_humano: true, motivo_humano: motivoEscalar, humano_em: new Date().toISOString() } : {}),
-      }).eq("id", conversa.id),
+      }).eq("id", conversa.id).then(({ error }) => { if (error) console.error("[conversas update]", error); }),
       supabaseAdmin.from("clientes").update({
         produtos_vistos: Array.from(novosVistosIds),
         produtos_interesse: Array.from(novosInteresseIds),
         temperatura_lead: temp,
         ...(podeOferecerCupom && new RegExp(`\\b${(cfgAg?.cupom_negociacao_codigo ?? "JULIANA10")}\\b`, "i").test(reply) ? { cupom_negociacao_oferecido_em: new Date().toISOString() } : {}),
-      }).eq("id", cliente.id),
-      supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }),
+      }).eq("id", cliente.id).then(({ error }) => { if (error) console.error("[clientes update]", error); }),
     ]);
 
-    const stevoKey = process.env.STEVO_API_KEY ?? "";
+    // Enviar blocos com delay entre mensagens e verificação de falha
     const blocosEnvio = separarMensagens(reply);
-    for (const bloco of blocosEnvio) {
-      const resp = await enviarTexto(numero, bloco, stevoKey);
-      console.log("[stevo-send]", resp.status);
+    for (let i = 0; i < blocosEnvio.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 400));
+      const resp = await enviarTexto(numero, blocosEnvio[i], stevoKey);
+      if (!resp.ok) console.error("[stevo-send]", resp.status, blocosEnvio[i].slice(0, 60));
+      else console.log("[stevo-send]", resp.status);
     }
 
+    // Enviar fotos de produtos mencionados
     const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
     const enviadasSet = new Set(fotosEnviadasAnt);
     const produtosMencionados = produtos.filter((p) => p.url_foto && novosVistosIds.has(p.id) && !enviadasSet.has(p.id)).slice(0, 3);
     for (const p of produtosMencionados) {
+      await new Promise((r) => setTimeout(r, 300));
       try {
         const imgResp = await fetch("https://smv2-4.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
           body: JSON.stringify({ number: numero, type: "image", url: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}${p.url_produto ? `\n${p.url_produto}` : ""}` }),
+          signal: AbortSignal.timeout(8000),
         });
         if (imgResp.ok) enviadasSet.add(p.id);
+        else console.error("[stevo-img-fail]", p.id, imgResp.status);
       } catch (err) { console.error("[stevo-img-fail]", p.id, err); }
     }
     if (produtosMencionados.length) await supabaseAdmin.from("conversas").update({ fotos_enviadas: Array.from(enviadasSet) }).eq("id", conversa.id);
