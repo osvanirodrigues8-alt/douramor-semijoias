@@ -58,7 +58,7 @@ async function handleChat(request: Request): Promise<Response> {
     const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
     const pedidoHumano = detectarPedidoHumano(message, palavrasExtras);
     if (pedidoHumano.sim) {
-      const msgEscalar = "Deixa eu chamar alguém da nossa equipe pra te ajudar melhor, tá? Um momento! 💛";
+      const msgEscalar = "Deixa eu verificar esse detalhe aqui com calma pra você — um momento 💛";
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgEscalar });
       await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString() }).eq("id", conversa.id);

@@ -17,7 +17,7 @@ import { executarFluxo } from "@/lib/shared/fluxo-engine";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
-const MSG_HUMANO = "Um momento! Vou chamar alguém da nossa equipe pra te ajudar pessoalmente 🙏";
+const MSG_HUMANO = "Deixa eu verificar isso aqui com mais calma pra você — um momento 💛";
 const MSG_AUDIO_FAIL = "Oi! Não consegui ouvir bem o seu áudio 😅 Pode me escrever o que você precisa?";
 const TENTATIVAS_ESCALAR_DEFAULT = 5;
 

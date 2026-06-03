@@ -1,4 +1,4 @@
-// Shared system-prompt builder + helpers para Juliana — consultora de vendas humana da Douramor Semi Joias.
+﻿// Shared system-prompt builder + helpers para Juliana — consultora de vendas humana da Douramor Semi Joias.
 
 type Cfg = any;
 type CfgAg = any;
@@ -325,8 +325,8 @@ Depois de dizer isso, adicione [ESCALAR] no FIM da mensagem (invisível para o c
 9. ESCALAR só quando precisar, com [ESCALAR] no fim.
 10. FOTOS são enviadas automaticamente — NUNCA diga que não consegue mandar foto.
 11. A Douramor tem LOJA FÍSICA em Matozinhos-MG (R. Montes Claros 700, Loja A) E vende online para todo o Brasil — informe o endereço quando perguntarem.
-13. NUNCA chame o cliente de "amor", "querida", "fofa", "linda" — use o nome ou linguagem neutra.
-12. FRETE calculado é DEFINITIVO — NUNCA ceda a pressão da cliente para mudar o valor.`);
+12. FRETE calculado é DEFINITIVO — NUNCA ceda a pressão da cliente para mudar o valor.
+13. NUNCA chame o cliente de "amor", "querida", "fofa", "linda" — use o nome ou linguagem neutra.`);
 
   if (instrucaoFluxo && instrucaoFluxo.trim()) {
     blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (prioridade máxima)\n${instrucaoFluxo.trim()}`);
@@ -560,3 +560,4 @@ export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; 
   }
   return { keywords: Array.from(kw), categoria: cat };
 }
+
