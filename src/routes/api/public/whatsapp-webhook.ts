@@ -9,6 +9,7 @@ import {
   detectarIntencaoCompra,
   detectarTipoConversa,
   detectarTemperatura,
+  transcreverAudio,
   descreverImagem,
   extrairKeywordsDeDescricao,
 } from "@/lib/shared/prompt";
@@ -94,22 +95,31 @@ async function handleWebhook(request: Request): Promise<Response> {
     const legendaImg: string | undefined =
       message?.imageMessage?.caption ?? data?.imageMessage?.caption ?? data?.caption;
 
-    let midiaTipo: "image" | null = null;
+    let midiaTipo: "audio" | "image" | null = null;
     let midiaUrl: string | null = null;
     let midiaTranscricao: string | null = null;
     let descricaoMidia: string | null = null;
 
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 
-    // Áudio: Anthropic não suporta áudio nativamente — solicitar texto ao usuário
+    // Áudio: transcreve via Groq Whisper; se falhar, pede para escrever
     const audioUrl: string | undefined =
       message?.audioMessage?.url ?? data?.audioMessage?.url ?? data?.audio?.url ?? data?.mediaUrl?.audio;
     if (!text && audioUrl) {
-      if (remoteJid) {
-        const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
-        await enviarTexto(numero, MSG_AUDIO_FAIL, stevoKey);
+      midiaTipo = "audio"; midiaUrl = audioUrl;
+      const tr = await transcreverAudio(audioUrl, ANTHROPIC_KEY);
+      if (tr) {
+        text = tr;
+        midiaTranscricao = tr;
+        console.log("[audio-transcrito]", tr.slice(0, 80));
+      } else {
+        // Groq não disponível ou falhou — pede para escrever
+        if (remoteJid) {
+          const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
+          await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);
+        }
+        return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
       }
-      return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     if (!text && imageUrl) {

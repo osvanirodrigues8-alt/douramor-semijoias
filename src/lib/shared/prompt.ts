@@ -399,16 +399,66 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
   }
 }
 
-// Transcrição de áudio via Anthropic (Claude suporta audio nativo)
-// Anthropic não suporta áudio nativo via API REST — função desativada, retorna null
-// O webhook lida com áudio pedindo ao cliente que escreva o texto
-export async function transcreverAudio(_url: string, _apiKey: string): Promise<string | null> {
-  return null;
+// Transcrição de áudio via Groq Whisper (rápido e gratuito)
+export async function transcreverAudio(url: string, _apiKey: string): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) {
+    console.warn("[transcreverAudio] GROQ_API_KEY não configurada");
+    return null;
+  }
+  try {
+    // Baixa o áudio
+    const audioResp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!audioResp.ok) return null;
+    const audioBuffer = await audioResp.arrayBuffer();
+    const contentType = audioResp.headers.get("content-type") ?? "audio/ogg";
+
+    // Determina extensão pelo content-type
+    const ext = contentType.includes("mp4") ? "mp4"
+      : contentType.includes("mpeg") ? "mp3"
+      : contentType.includes("ogg") ? "ogg"
+      : contentType.includes("webm") ? "webm"
+      : "ogg";
+
+    // Envia para Groq Whisper
+    const form = new FormData();
+    form.append("file", new Blob([audioBuffer], { type: contentType }), `audio.${ext}`);
+    form.append("model", "whisper-large-v3-turbo");
+    form.append("language", "pt");
+    form.append("response_format", "text");
+
+    const resp = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${groqKey}` },
+      body: form,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!resp.ok) {
+      console.error("[transcreverAudio] Groq error", resp.status, await resp.text().catch(() => ""));
+      return null;
+    }
+    const text = (await resp.text()).trim();
+    return text || null;
+  } catch (e) {
+    console.error("[transcreverAudio] fail", e);
+    return null;
+  }
 }
 
 // Descrição de imagem via Anthropic Vision
+// Baixa a imagem e envia como base64 (URLs temporárias do WhatsApp expiram e Anthropic não consegue acessá-las diretamente)
 export async function descreverImagem(url: string, apiKey: string): Promise<string | null> {
   try {
+    // Baixa a imagem
+    const imgResp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!imgResp.ok) return null;
+    const imgBuffer = await imgResp.arrayBuffer();
+    const rawType = imgResp.headers.get("content-type") ?? "image/jpeg";
+    // Anthropic aceita: image/jpeg, image/png, image/gif, image/webp
+    const mediaType = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(rawType)
+      ? rawType : "image/jpeg") as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+    const base64 = Buffer.from(imgBuffer).toString("base64");
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
@@ -419,16 +469,20 @@ export async function descreverImagem(url: string, apiKey: string): Promise<stri
           role: "user",
           content: [
             { type: "text", text: "Descreva esta imagem de joia/semijoia em pt-BR para uma vendedora identificar peças parecidas. Diga: TIPO (brinco/colar/anel/pulseira/etc), COR (dourado/prateado/rose), ESTILO (delicado/clássico/moderno/ousado), DETALHES (pedras, formato, tamanho). Máx 3 frases." },
-            { type: "image", source: { type: "url", url } },
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
           ],
         }],
       }),
+      signal: AbortSignal.timeout(20000),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      console.error("[descreverImagem] Anthropic error", resp.status);
+      return null;
+    }
     const j = await resp.json();
     return (j.content?.[0]?.text ?? "").trim() || null;
   } catch (e) {
-    console.error("descreverImagem fail", e);
+    console.error("[descreverImagem] fail", e);
     return null;
   }
 }
