@@ -35,8 +35,9 @@ export function buildSystemPrompt(opts: {
   freteFalhou?: boolean;
   pediuFretemasSemCep?: boolean;
   tentativasEscalar?: number;
+  cepRecebidoAgora?: boolean;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
   const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
@@ -200,17 +201,20 @@ ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
       const p = o.prazo_dias != null ? ` (~${o.prazo_dias} dias úteis)` : "";
       return `- ${o.nome}: ${v}${p}`;
     }).join("\n");
-    blocos.push(`# COTAÇÃO DE FRETE — CEP ${cotacaoFrete.cep}\n${linhas}\nUse ESSES valores reais. Apresente em 1-2 frases naturais.`);
+    const obrigatorio = cepRecebidoAgora
+      ? `\nATENÇÃO: a cliente acabou de informar o CEP. OBRIGATÓRIO confirmar o frete nesta resposta antes de qualquer outra coisa.`
+      : `\nApresente em 1-2 frases naturais quando relevante.`;
+    blocos.push(`# COTAÇÃO DE FRETE — CEP ${cotacaoFrete.cep}\n${linhas}${obrigatorio}`);
   } else if (pediuFretemasSemCep) {
-    blocos.push(`# FRETE — PRECISA DO CEP\nPeça o CEP de forma direta e simpática.`);
+    blocos.push(`# FRETE — PRECISA DO CEP\nPeça o CEP de forma direta e simpática: "Me passa seu CEP que já calculo o frete pra você 💛"`);
   } else if (freteFalhou) {
-    blocos.push(`# FRETE — FALHA\nDiga que vai confirmar e adicione [ESCALAR] no fim.`);
+    blocos.push(`# FRETE — FALHA NO CÁLCULO\nInforme que o frete é calculado no site e peça o CEP para tentar novamente.`);
   } else if (freteModo === "gratis" || (freteModo !== "nuvemshop" && Number(cfg?.taxa_entrega ?? 0) === 0)) {
-    blocos.push(`# FRETE\nFrete GRÁTIS pra todo o Brasil.`);
+    blocos.push(`# FRETE\nFrete GRÁTIS pra todo o Brasil. Mencione quando relevante.`);
   } else if (freteModo === "manual") {
-    blocos.push(`# FRETE\nFrete fixo R$ ${cfg?.taxa_entrega ?? 0}.`);
+    blocos.push(`# FRETE\nFrete fixo R$ ${cfg?.taxa_entrega ?? 0}. Mencione quando relevante.`);
   } else {
-    blocos.push(`# FRETE\nQuando perguntarem, peça o CEP: "Me passa seu CEP que já calculo pra você 💛".`);
+    blocos.push(`# FRETE\nQuando perguntarem sobre entrega, peça o CEP: "Me passa seu CEP que já calculo pra você 💛".`);
   }
 
   if (palavrasProibidas || topicosProibidos) {

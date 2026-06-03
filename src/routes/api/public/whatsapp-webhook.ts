@@ -394,6 +394,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
+      cepRecebidoAgora: !!cepNaMsg,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
