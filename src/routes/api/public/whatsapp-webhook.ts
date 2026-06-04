@@ -684,10 +684,15 @@ async function handleWebhook(request: Request): Promise<Response> {
       }).eq("id", cliente.id).then(({ error }) => { if (error) console.error("[clientes update]", error); }),
     ]);
 
+    // Delay humanizador antes de enviar (simula tempo de digitação)
+    // Entre 30s e 50s aleatório para não parecer robô
+    const delayMs = 30000 + Math.floor(Math.random() * 20000);
+    await new Promise((r) => setTimeout(r, delayMs));
+
     // Enviar blocos com delay entre mensagens e verificação de falha
     const blocosEnvio = separarMensagens(reply);
     for (let i = 0; i < blocosEnvio.length; i++) {
-      if (i > 0) await new Promise((r) => setTimeout(r, 400));
+      if (i > 0) await new Promise((r) => setTimeout(r, 800));
       const resp = await enviarTexto(numero, blocosEnvio[i], stevoKey);
       if (!resp.ok) console.error("[stevo-send]", resp.status, blocosEnvio[i].slice(0, 60));
       else console.log("[stevo-send]", resp.status);
