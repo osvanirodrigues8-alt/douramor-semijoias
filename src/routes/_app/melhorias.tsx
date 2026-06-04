@@ -6,7 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Bot, CheckCircle, Clock, MessageSquare, XCircle, Star, Sparkles, Loader2, ScanSearch } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AlertTriangle, Bot, CheckCircle, Clock, MessageSquare, XCircle, Star, Sparkles, Loader2, ScanSearch, Settings2, X } from "lucide-react";
 
 export const Route = createFileRoute("/_app/melhorias")({ component: Melhorias });
 
@@ -78,6 +81,17 @@ function Melhorias() {
   const [analisando, setAnalisando] = useState(false);
   const [ultimaAnalise, setUltimaAnalise] = useState<{ analisadas: number; comProblema: number; notaMedia?: string } | null>(null);
 
+  // Modal de seleção para análise
+  const [modalAberto, setModalAberto] = useState(false);
+  const [conversasDisponiveis, setConversasDisponiveis] = useState<any[]>([]);
+  const [conversasSelecionadas, setConversasSelecionadas] = useState<Set<string>>(new Set());
+  const [dataInicio, setDataInicio] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10);
+  });
+  const [dataFim, setDataFim] = useState(() => new Date().toISOString().slice(0, 10));
+  const [buscaConv, setBuscaConv] = useState("");
+  const [carregandoConvs, setCarregandoConvs] = useState(false);
+
   const [filtroStatus, setFiltroStatus] = useState("pendente");
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroSev, setFiltroSev] = useState("todos");
@@ -136,17 +150,89 @@ function Melhorias() {
     loadHistorico();
   };
 
+  const abrirModalAnalise = async () => {
+    setModalAberto(true);
+    setCarregandoConvs(true);
+    setBuscaConv("");
+    setConversasSelecionadas(new Set());
+    const inicio = new Date(dataInicio + "T00:00:00").toISOString();
+    const fim = new Date(dataFim + "T23:59:59").toISOString();
+    const { data } = await supabase
+      .from("conversas")
+      .select(`id, sessao_token, ultima_mensagem_em, cliente_id,
+        cliente:clientes(nome, contato)`)
+      .eq("canal", "whatsapp")
+      .gte("ultima_mensagem_em", inicio)
+      .lte("ultima_mensagem_em", fim)
+      .order("ultima_mensagem_em", { ascending: false })
+      .limit(100);
+    setConversasDisponiveis((data ?? []).map((c: any) => ({
+      ...c,
+      cliente: Array.isArray(c.cliente) ? (c.cliente[0] ?? null) : (c.cliente ?? null),
+    })));
+    setCarregandoConvs(false);
+  };
+
+  const recarregarConversas = async () => {
+    setCarregandoConvs(true);
+    const inicio = new Date(dataInicio + "T00:00:00").toISOString();
+    const fim = new Date(dataFim + "T23:59:59").toISOString();
+    const { data } = await supabase
+      .from("conversas")
+      .select(`id, sessao_token, ultima_mensagem_em, cliente_id,
+        cliente:clientes(nome, contato)`)
+      .eq("canal", "whatsapp")
+      .gte("ultima_mensagem_em", inicio)
+      .lte("ultima_mensagem_em", fim)
+      .order("ultima_mensagem_em", { ascending: false })
+      .limit(100);
+    setConversasDisponiveis((data ?? []).map((c: any) => ({
+      ...c,
+      cliente: Array.isArray(c.cliente) ? (c.cliente[0] ?? null) : (c.cliente ?? null),
+    })));
+    setCarregandoConvs(false);
+  };
+
+  const toggleConversa = (id: string) => {
+    setConversasSelecionadas((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selecionarTodas = () => {
+    const filtradas = conversasDisponiveis.filter((c) => {
+      const nome = (c.cliente?.nome ?? "").toLowerCase();
+      const num = (c.cliente?.contato ?? c.sessao_token ?? "").toLowerCase();
+      return !buscaConv || nome.includes(buscaConv.toLowerCase()) || num.includes(buscaConv.toLowerCase());
+    });
+    setConversasSelecionadas(new Set(filtradas.map((c) => c.id)));
+  };
+
   const analisarAgora = async () => {
+    setModalAberto(false);
     setAnalisando(true);
     setUltimaAnalise(null);
     try {
-      const res = await fetch("/api/public/trigger-auditoria", { method: "POST" });
+      const body: any = {
+        data_inicio: new Date(dataInicio + "T00:00:00").toISOString(),
+        data_fim: new Date(dataFim + "T23:59:59").toISOString(),
+      };
+      if (conversasSelecionadas.size > 0) {
+        body.conversa_ids = Array.from(conversasSelecionadas);
+      }
+      const res = await fetch("/api/public/trigger-auditoria", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
       if (data.ok) {
         setUltimaAnalise({ analisadas: data.analisadas ?? 0, comProblema: data.comProblema ?? 0, notaMedia: data.notaMedia });
       }
     } catch {
-      // silencioso — resultados aparecem via Realtime
+      // resultados aparecem via Realtime
     }
     setAnalisando(false);
     loadFeedbacks();
@@ -177,26 +263,24 @@ function Melhorias() {
         </div>
         <div className="flex flex-col items-end gap-1">
           <Button
-            onClick={analisarAgora}
+            onClick={abrirModalAnalise}
             disabled={analisando}
             className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
           >
             {analisando
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Analisando conversas...</>
-              : <><ScanSearch className="h-4 w-4" /> Analisar conversas agora</>}
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Analisando...</>
+              : <><ScanSearch className="h-4 w-4" /> Analisar conversas</>}
           </Button>
           {ultimaAnalise && !analisando && (
             <p className="text-xs text-muted-foreground">
               ✓ {ultimaAnalise.analisadas} analisadas
               {ultimaAnalise.notaMedia ? ` · nota média ${ultimaAnalise.notaMedia}/10` : ""}
-              {ultimaAnalise.comProblema > 0
-                ? ` · ${ultimaAnalise.comProblema} com problema(s)`
-                : " · nenhum problema crítico"}
+              {ultimaAnalise.comProblema > 0 ? ` · ${ultimaAnalise.comProblema} com problema(s)` : " · sem problemas críticos"}
             </p>
           )}
           {analisando && (
             <p className="text-xs text-muted-foreground animate-pulse">
-              Claude Sonnet analisando conversas das últimas 48h...
+              Claude Sonnet analisando...
             </p>
           )}
         </div>
@@ -366,6 +450,126 @@ function Melhorias() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ── Modal de seleção de conversas ───────────────────────────────── */}
+      <Dialog open={modalAberto} onOpenChange={setModalAberto}>
+        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-purple-600" />
+              Configurar análise
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Filtro de data */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Período</p>
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground mb-1">De</p>
+                <Input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="text-sm" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground mb-1">Até</p>
+                <Input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="text-sm" />
+              </div>
+              <div className="pt-5">
+                <Button size="sm" variant="outline" onClick={recarregarConversas} disabled={carregandoConvs}>
+                  {carregandoConvs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Buscar"}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Seleção de conversas */}
+          <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">
+                Conversas
+                {conversasSelecionadas.size > 0 && (
+                  <Badge className="ml-2 text-xs bg-purple-600 text-white">{conversasSelecionadas.size} selecionada(s)</Badge>
+                )}
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="ghost" className="text-xs h-6" onClick={selecionarTodas}>Todas</Button>
+                {conversasSelecionadas.size > 0 && (
+                  <Button size="sm" variant="ghost" className="text-xs h-6" onClick={() => setConversasSelecionadas(new Set())}>
+                    <X className="h-3 w-3 mr-1" />Limpar
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <Input
+              placeholder="Buscar por nome ou número..."
+              value={buscaConv}
+              onChange={(e) => setBuscaConv(e.target.value)}
+              className="text-xs h-8"
+            />
+
+            <ScrollArea className="flex-1 border rounded-md">
+              {carregandoConvs ? (
+                <div className="p-4 text-center text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto mb-1" />Carregando...
+                </div>
+              ) : conversasDisponiveis.length === 0 ? (
+                <p className="p-4 text-center text-xs text-muted-foreground">
+                  Nenhuma conversa no período selecionado
+                </p>
+              ) : (
+                <div className="p-1">
+                  {conversasDisponiveis
+                    .filter((c) => {
+                      const nome = (c.cliente?.nome ?? "").toLowerCase();
+                      const num = (c.cliente?.contato ?? c.sessao_token ?? "").toLowerCase();
+                      return !buscaConv || nome.includes(buscaConv.toLowerCase()) || num.includes(buscaConv.toLowerCase());
+                    })
+                    .map((c) => {
+                      const nome = c.cliente?.nome ?? "Cliente";
+                      const num = String(c.sessao_token ?? "").replace(/^wa:/, "").replace(/@.*/, "");
+                      const hora = new Date(c.ultima_mensagem_em).toLocaleString("pt-BR", {
+                        day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                      });
+                      const selecionado = conversasSelecionadas.has(c.id);
+                      return (
+                        <div
+                          key={c.id}
+                          onClick={() => toggleConversa(c.id)}
+                          className={`flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-muted/50 transition-colors
+                            ${selecionado ? "bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800" : ""}`}
+                        >
+                          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors
+                            ${selecionado ? "bg-purple-600 border-purple-600" : "border-muted-foreground"}`}>
+                            {selecionado && <CheckCircle className="h-3 w-3 text-white" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{nome}</p>
+                            <p className="text-[10px] text-muted-foreground">{num}</p>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{hora}</span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+
+          <DialogFooter className="gap-2 flex-row">
+            <Button variant="outline" onClick={() => setModalAberto(false)} className="flex-1">Cancelar</Button>
+            <Button
+              onClick={analisarAgora}
+              disabled={conversasDisponiveis.length === 0}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white gap-2"
+            >
+              <ScanSearch className="h-4 w-4" />
+              {conversasSelecionadas.size > 0
+                ? `Analisar ${conversasSelecionadas.size} conversa(s)`
+                : `Analisar todas (${conversasDisponiveis.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

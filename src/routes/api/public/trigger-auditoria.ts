@@ -56,32 +56,53 @@ Responda SOMENTE com JSON válido, sem markdown, sem texto fora do JSON:
 
 Seja rigoroso. Nota 8+ apenas para conversas exemplares. Se encontrou problema real, descreva com um trecho da conversa como evidência.`;
 
-async function processAuditoriaManual(): Promise<object> {
+async function processAuditoriaManual(params: {
+  conversaIds?: string[];
+  dataInicio?: string;
+  dataFim?: string;
+}): Promise<object> {
   const resultados: any[] = [];
   const agora = new Date();
   const seisHorasAtras = new Date(agora.getTime() - 6 * 3600_000).toISOString();
-  const quarentaOitoHorasAtras = new Date(agora.getTime() - 48 * 3600_000).toISOString();
+  const dataInicioEfetiva = params.dataInicio ?? new Date(agora.getTime() - 48 * 3600_000).toISOString();
+  const dataFimEfetiva = params.dataFim ?? agora.toISOString();
 
-  // Busca conversas com atividade nas últimas 48h
-  const { data: conversas } = await supabaseAdmin
-    .from("conversas")
-    .select("id, cliente_id, precisa_humano, sessao_token, ultima_mensagem_em")
-    .eq("canal", "whatsapp")
-    .gte("ultima_mensagem_em", quarentaOitoHorasAtras)
-    .order("ultima_mensagem_em", { ascending: false })
-    .limit(50);
+  let conversas: any[];
 
-  if (!conversas?.length) return { ok: true, processadas: 0, motivo: "sem conversas recentes" };
+  if (params.conversaIds?.length) {
+    // Busca apenas as conversas selecionadas
+    const { data } = await supabaseAdmin
+      .from("conversas")
+      .select("id, cliente_id, precisa_humano, sessao_token, ultima_mensagem_em")
+      .in("id", params.conversaIds)
+      .eq("canal", "whatsapp");
+    conversas = data ?? [];
+  } else {
+    // Busca por período
+    const { data } = await supabaseAdmin
+      .from("conversas")
+      .select("id, cliente_id, precisa_humano, sessao_token, ultima_mensagem_em")
+      .eq("canal", "whatsapp")
+      .gte("ultima_mensagem_em", dataInicioEfetiva)
+      .lte("ultima_mensagem_em", dataFimEfetiva)
+      .order("ultima_mensagem_em", { ascending: false })
+      .limit(50);
+    conversas = data ?? [];
+  }
 
-  // Evitar re-análise das últimas 6h (mas não mais que isso — manual deve ser completo)
-  const { data: recentes } = await (supabaseAdmin as any)
-    .from("feedback_ia")
-    .select("conversa_id")
-    .eq("tipo", "auto_revisao_ia")
-    .gte("criado_em", seisHorasAtras);
+  if (!conversas.length) return { ok: true, processadas: 0, motivo: "sem conversas no período" };
 
-  const idsRecentes = new Set((recentes ?? []).map((r: any) => r.conversa_id));
-  const elegiveis = (conversas as any[]).filter((c) => !idsRecentes.has(c.id));
+  // Quando há seleção específica, NÃO filtrar por "já revisada" — usuário quer reanalisar
+  let elegiveis = conversas;
+  if (!params.conversaIds?.length) {
+    const { data: recentes } = await (supabaseAdmin as any)
+      .from("feedback_ia")
+      .select("conversa_id")
+      .eq("tipo", "auto_revisao_ia")
+      .gte("criado_em", seisHorasAtras);
+    const idsRecentes = new Set((recentes ?? []).map((r: any) => r.conversa_id));
+    elegiveis = conversas.filter((c) => !idsRecentes.has(c.id));
+  }
 
   for (const conv of elegiveis) {
     try {
@@ -222,7 +243,16 @@ async function handleRequest(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: cors });
   try {
-    const resultado = await processAuditoriaManual();
+    let params: { conversaIds?: string[]; dataInicio?: string; dataFim?: string } = {};
+    try {
+      const body = await request.json();
+      params = {
+        conversaIds: body.conversa_ids,
+        dataInicio: body.data_inicio,
+        dataFim: body.data_fim,
+      };
+    } catch { /* sem body é ok */ }
+    const resultado = await processAuditoriaManual(params);
     return new Response(JSON.stringify(resultado), {
       headers: { ...cors, "Content-Type": "application/json" },
     });
