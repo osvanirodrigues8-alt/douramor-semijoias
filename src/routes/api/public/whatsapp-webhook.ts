@@ -84,7 +84,21 @@ async function handleWebhook(request: Request): Promise<Response> {
     const info = data?.Info ?? data?.info ?? {};
     const message = data?.message ?? data?.Message ?? {};
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
-    const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
+
+    // JID bruto — pode ser LID (@lid) quando vem de anúncio Meta
+    const remoteJidRaw: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
+
+    // Se for LID (@lid), usar SenderAlt/RecipientAlt que contém o número real (@s.whatsapp.net)
+    const remoteJidReal: string | undefined =
+      remoteJidRaw?.includes("@lid")
+        ? (info?.SenderAlt ?? info?.RecipientAlt ?? data?.JIDAlt ?? remoteJidRaw)
+        : remoteJidRaw;
+
+    const remoteJid: string | undefined = remoteJidReal ?? remoteJidRaw;
+    if (remoteJidRaw?.includes("@lid") && remoteJidReal && remoteJidReal !== remoteJidRaw) {
+      console.log("[lid-fix] LID detectado:", remoteJidRaw, "→ número real:", remoteJidReal);
+    }
+
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
 
     // Extrair e limpar texto
