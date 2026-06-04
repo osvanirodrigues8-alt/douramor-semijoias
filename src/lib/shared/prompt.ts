@@ -454,7 +454,7 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
 
 // Transcrição de áudio via Groq Whisper (rápido e gratuito)
 export async function transcreverAudio(url: string, _apiKey: string, stevoKey?: string): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY;
+  const groqKey = (process.env.GROQ_API_KEY ?? "").replace(/^﻿/, "").trim();
   if (!groqKey) {
     console.warn("[transcreverAudio] GROQ_API_KEY não configurada");
     return null;
@@ -512,10 +512,11 @@ export async function transcreverAudio(url: string, _apiKey: string, stevoKey?: 
 // Transcrição de áudio a partir de base64 (formato Stevo)
 // Usa multipart manual com Buffer para evitar bug do undici com FormData + binário
 export async function transcreverAudioBase64(base64: string, _mimetype: string, _apiKey: string): Promise<string | null> {
-  const groqKey = process.env.GROQ_API_KEY;
+  // Remove BOM e espaços invisíveis que corrompem o header Authorization
+  const groqKey = (process.env.GROQ_API_KEY ?? "").replace(/^﻿/, "").trim();
   if (!groqKey) { console.warn("[transcreverAudioBase64] GROQ_API_KEY não configurada"); return null; }
   try {
-    const cleanB64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+    const cleanB64 = base64.replace(/^﻿/, "").replace(/[^A-Za-z0-9+/=]/g, '');
     const audioBuffer = Buffer.from(cleanB64, 'base64');
     console.log("[transcreverAudioBase64] buffer size:", audioBuffer.length);
 
