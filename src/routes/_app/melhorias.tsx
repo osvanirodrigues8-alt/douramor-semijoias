@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertTriangle, Bot, CheckCircle, Clock, MessageSquare, XCircle, Star, Sparkles } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle, Clock, MessageSquare, XCircle, Star, Sparkles, Loader2, ScanSearch } from "lucide-react";
 
 export const Route = createFileRoute("/_app/melhorias")({ component: Melhorias });
 
@@ -75,6 +75,8 @@ function Melhorias() {
   const [historico, setHistorico] = useState<AuditoriaPrompt[]>([]);
   const [loading, setLoading] = useState(true);
   const [aplicando, setAplicando] = useState<string | null>(null);
+  const [analisando, setAnalisando] = useState(false);
+  const [ultimaAnalise, setUltimaAnalise] = useState<{ analisadas: number; comProblema: number } | null>(null);
 
   const [filtroStatus, setFiltroStatus] = useState("pendente");
   const [filtroTipo, setFiltroTipo] = useState("todos");
@@ -134,6 +136,22 @@ function Melhorias() {
     loadHistorico();
   };
 
+  const analisarAgora = async () => {
+    setAnalisando(true);
+    setUltimaAnalise(null);
+    try {
+      const res = await fetch("/api/public/trigger-auditoria", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setUltimaAnalise({ analisadas: data.analisadas ?? 0, comProblema: data.comProblema ?? 0 });
+      }
+    } catch {
+      // silencioso — resultados aparecem via Realtime
+    }
+    setAnalisando(false);
+    loadFeedbacks();
+  };
+
   const descartar = async (fb: FeedbackIA) => {
     await db.from("feedback_ia").update({ status: "descartado", resolvido_em: new Date().toISOString() }).eq("id", fb.id);
     loadFeedbacks();
@@ -147,14 +165,40 @@ function Melhorias() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-yellow-500" />
-          Melhorias da IA
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Auditoria contínua da Juliana — detecte e corrija problemas com um clique
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="h-6 w-6 text-yellow-500" />
+            Melhorias da IA
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Auditoria contínua da Juliana — detecte e corrija problemas com um clique
+          </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            onClick={analisarAgora}
+            disabled={analisando}
+            className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
+          >
+            {analisando
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Analisando conversas...</>
+              : <><ScanSearch className="h-4 w-4" /> Analisar conversas agora</>}
+          </Button>
+          {ultimaAnalise && !analisando && (
+            <p className="text-xs text-muted-foreground">
+              ✓ {ultimaAnalise.analisadas} conversas analisadas
+              {ultimaAnalise.comProblema > 0
+                ? ` — ${ultimaAnalise.comProblema} problema(s) encontrado(s)`
+                : " — nenhum problema crítico"}
+            </p>
+          )}
+          {analisando && (
+            <p className="text-xs text-muted-foreground animate-pulse">
+              Claude está lendo as conversas das últimas 48h...
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

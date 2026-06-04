@@ -27,6 +27,7 @@ import { Route as AppAnunciosRouteImport } from './routes/_app/anuncios'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
+import { Route as ApiPublicTriggerAuditoriaRouteImport } from './routes/api/public/trigger-auditoria'
 import { Route as ApiPublicRevisaoIaCronRouteImport } from './routes/api/public/revisao-ia-cron'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
 import { Route as ApiPublicMetaAdsRouteImport } from './routes/api/public/meta-ads'
@@ -128,6 +129,12 @@ const ApiPublicWhatsappWebhookRoute =
     path: '/api/public/whatsapp-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicTriggerAuditoriaRoute =
+  ApiPublicTriggerAuditoriaRouteImport.update({
+    id: '/api/public/trigger-auditoria',
+    path: '/api/public/trigger-auditoria',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicRevisaoIaCronRoute = ApiPublicRevisaoIaCronRouteImport.update({
   id: '/api/public/revisao-ia-cron',
   path: '/api/public/revisao-ia-cron',
@@ -206,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
+  '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -235,6 +243,7 @@ export interface FileRoutesByTo {
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
+  '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -266,6 +275,7 @@ export interface FileRoutesById {
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
+  '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -297,6 +307,7 @@ export interface FileRouteTypes {
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
+    | '/api/public/trigger-auditoria'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
+    | '/api/public/trigger-auditoria'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -356,6 +368,7 @@ export interface FileRouteTypes {
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
+    | '/api/public/trigger-auditoria'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -371,6 +384,7 @@ export interface RootRouteChildren {
   ApiPublicMetaAdsRoute: typeof ApiPublicMetaAdsRoute
   ApiPublicPosVendaCronRoute: typeof ApiPublicPosVendaCronRoute
   ApiPublicRevisaoIaCronRoute: typeof ApiPublicRevisaoIaCronRoute
+  ApiPublicTriggerAuditoriaRoute: typeof ApiPublicTriggerAuditoriaRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
@@ -504,6 +518,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/trigger-auditoria': {
+      id: '/api/public/trigger-auditoria'
+      path: '/api/public/trigger-auditoria'
+      fullPath: '/api/public/trigger-auditoria'
+      preLoaderRoute: typeof ApiPublicTriggerAuditoriaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/revisao-ia-cron': {
       id: '/api/public/revisao-ia-cron'
       path: '/api/public/revisao-ia-cron'
@@ -627,6 +648,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicMetaAdsRoute: ApiPublicMetaAdsRoute,
   ApiPublicPosVendaCronRoute: ApiPublicPosVendaCronRoute,
   ApiPublicRevisaoIaCronRoute: ApiPublicRevisaoIaCronRoute,
+  ApiPublicTriggerAuditoriaRoute: ApiPublicTriggerAuditoriaRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicHooksSyncNuvemshopProductsRoute:
     ApiPublicHooksSyncNuvemshopProductsRoute,
