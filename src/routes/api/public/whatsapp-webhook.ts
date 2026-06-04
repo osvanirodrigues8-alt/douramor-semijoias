@@ -58,6 +58,20 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
+async function verificarDuplicata(conversaId: string, texto: string): Promise<boolean> {
+  const trintaSegAtras = new Date(Date.now() - 30_000).toISOString();
+  const { data } = await supabaseAdmin
+    .from("mensagens")
+    .select("id")
+    .eq("conversa_id", conversaId)
+    .eq("papel", "assistant")
+    .eq("conteudo", texto)
+    .gte("criado_em", trintaSegAtras)
+    .limit(1)
+    .maybeSingle();
+  return !!data;
+}
+
 async function handleWebhook(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -100,9 +114,12 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
 
     const pushNameRaw: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
-    // Validar pushName: ignorar se for muito longo (> 60 chars) ou parecer mensagem (tem pontuação excessiva)
-    const pushName: string | undefined = (pushNameRaw && pushNameRaw.length <= 60 && !/[!?]{2,}/.test(pushNameRaw) && pushNameRaw.split(" ").length <= 6)
+    // Validar pushName: ignorar se for muito longo (> 60 chars), parecer mensagem (pontuação excessiva) ou conter palavras de anúncio
+    const palavrasAnuncio = ["clique", "aqui", "oferta", "promoção", "promocao", "veja", "compre", "acesse", "grátis", "gratis", "desconto", "especial", "exclusiv", "garanta", "limited", "aproveite"];
+    const pushNameTemAnuncio = pushNameRaw ? palavrasAnuncio.some((p) => new RegExp(p, "i").test(pushNameRaw)) : false;
+    const pushName: string | undefined = (pushNameRaw && pushNameRaw.length <= 60 && !/[!?]{2,}/.test(pushNameRaw) && pushNameRaw.split(" ").length <= 6 && !pushNameTemAnuncio)
       ? pushNameRaw.trim() : undefined;
+    if (pushNameRaw && pushNameTemAnuncio) console.log("[pushName] ignorado por conter palavra de anúncio:", pushNameRaw);
 
     // Extrair e limpar texto
     let text: string | undefined =
@@ -523,7 +540,8 @@ async function handleWebhook(request: Request): Promise<Response> {
     const cepNaMsg = extrairCep(text);
     const cepSalvo = (cliente?.cep as string | undefined) ?? ((conversa.contexto as any)?.cep as string | undefined) ?? null;
     const cepUsar = cepNaMsg ?? cepSalvo;
-    const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg;
+    // querFrete: também ativa quando cliente já tem CEP salvo e menciona frete de alguma forma — evita loop de pedido de CEP
+    const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg || (!!cepSalvo && /\b(frete|entrega|envio|prazo|chegar|chegará|quanto\s+fica|quanto\s+custa)\b/i.test(text));
 
     // Salvar CEP sempre que informado pelo cliente, independente do resultado do frete
     if (cepNaMsg && cliente?.id) {
@@ -709,6 +727,12 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Enviar blocos com delay entre mensagens e verificação de falha
     const blocosEnvio = separarMensagens(reply);
+    // Verificar duplicata antes de enviar (anti-loop de 30s)
+    const isDuplicata = await verificarDuplicata(conversa.id, reply);
+    if (isDuplicata) {
+      console.log("[dedup] mensagem duplicada suprimida:", reply.slice(0, 80));
+      return new Response(JSON.stringify({ ok: true, dedup: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
     for (let i = 0; i < blocosEnvio.length; i++) {
       if (i > 0) await new Promise((r) => setTimeout(r, 800));
       const resp = await enviarTexto(numero, blocosEnvio[i], stevoKey);
