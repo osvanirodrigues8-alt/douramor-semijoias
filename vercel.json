@@ -1,10 +1,5 @@
 {
   "buildCommand": "npm run build:vercel",
-  "functions": {
-    "src/routes/api/public/whatsapp-webhook.ts": { "maxDuration": 90 },
-    "src/routes/api/public/trigger-auditoria.ts": { "maxDuration": 90 },
-    "src/routes/api/public/revisao-ia-cron.ts": { "maxDuration": 90 }
-  },
   "crons": [
     { "path": "/api/public/follow-up-cron", "schedule": "0 * * * *" },
     { "path": "/api/public/pos-venda-cron", "schedule": "30 * * * *" },

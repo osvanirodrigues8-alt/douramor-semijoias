@@ -83,6 +83,7 @@ writeFileSync(join(funcDir, '.vc-config.json'), JSON.stringify({
   runtime: 'nodejs20.x',
   handler: 'index.js',
   launcherType: 'Nodejs',
+  maxDuration: 90,
 }))
 
 // 5. Routing config — filesystem handle serve arquivos estáticos primeiro
