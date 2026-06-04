@@ -58,20 +58,6 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
-async function verificarDuplicata(conversaId: string, texto: string): Promise<boolean> {
-  const trintaSegAtras = new Date(Date.now() - 30_000).toISOString();
-  const { data } = await supabaseAdmin
-    .from("mensagens")
-    .select("id")
-    .eq("conversa_id", conversaId)
-    .eq("papel", "assistant")
-    .eq("conteudo", texto)
-    .gte("criado_em", trintaSegAtras)
-    .limit(1)
-    .maybeSingle();
-  return !!data;
-}
-
 async function handleWebhook(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -114,12 +100,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
 
     const pushNameRaw: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
-    // Validar pushName: ignorar se for muito longo (> 60 chars), parecer mensagem (pontuação excessiva) ou conter palavras de anúncio
-    const palavrasAnuncio = ["clique", "aqui", "oferta", "promoção", "promocao", "veja", "compre", "acesse", "grátis", "gratis", "desconto", "especial", "exclusiv", "garanta", "limited", "aproveite"];
-    const pushNameTemAnuncio = pushNameRaw ? palavrasAnuncio.some((p) => new RegExp(p, "i").test(pushNameRaw)) : false;
-    const pushName: string | undefined = (pushNameRaw && pushNameRaw.length <= 60 && !/[!?]{2,}/.test(pushNameRaw) && pushNameRaw.split(" ").length <= 6 && !pushNameTemAnuncio)
+    // Validar pushName: ignorar se for muito longo (> 60 chars) ou parecer mensagem (tem pontuação excessiva)
+    const pushName: string | undefined = (pushNameRaw && pushNameRaw.length <= 60 && !/[!?]{2,}/.test(pushNameRaw) && pushNameRaw.split(" ").length <= 6)
       ? pushNameRaw.trim() : undefined;
-    if (pushNameRaw && pushNameTemAnuncio) console.log("[pushName] ignorado por conter palavra de anúncio:", pushNameRaw);
 
     // Extrair e limpar texto
     let text: string | undefined =
@@ -163,18 +146,20 @@ async function handleWebhook(request: Request): Promise<Response> {
          data?.audio?.mediaUrl ??
          data?.mediaUrl?.audio)
       : undefined;
-    const audioBase64: string | undefined =
-      data?.base64 ??
-      message?.base64 ??
-      data?.audioMessage?.base64 ??
-      message?.audioMessage?.base64 ??
-      info?.base64;
+    // audioBase64 só é considerado se isAudioType=true — evita tratar base64 de imagens/docs como áudio
+    const audioBase64: string | undefined = isAudioType
+      ? (data?.base64 ??
+         message?.base64 ??
+         data?.audioMessage?.base64 ??
+         message?.audioMessage?.base64 ??
+         info?.base64)
+      : undefined;
     const audioMimetype: string =
       message?.audioMessage?.mimetype ??
       data?.audioMessage?.mimetype ??
       info?.mimetype ??
       "audio/ogg; codecs=opus";
-    const isAudio = !!(audioUrl || audioBase64 || isAudioType);
+    const isAudio = isAudioType && !!(audioUrl || audioBase64 || isAudioType);
 
     if (isAudio) {
       console.log("[audio-detect] audioUrl:", audioUrl, "| base64:", audioBase64 ? `${audioBase64.length}chars` : "none", "| mimetype:", audioMimetype, "| isAudio:", isAudio);
@@ -218,10 +203,10 @@ async function handleWebhook(request: Request): Promise<Response> {
             console.log("[audio] MSG_AUDIO_FAIL suprimida — já enviada nos últimos 5min");
           }
         }
-        // Registrar falha de áudio para auditoria
-        if (conversa?.id) {
+        // Registrar falha de áudio para auditoria (conversa pode não existir ainda neste ponto)
+        if (convExiste?.id) {
           registrarFeedback(supabaseAdmin, {
-            conversaId: conversa.id,
+            conversaId: convExiste.id,
             tipo: "auto_timeout",
             severidade: "baixa",
             descricao: "Transcrição de áudio falhou — cliente recebeu pedido para escrever",
@@ -276,6 +261,17 @@ async function handleWebhook(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    // IDEMPOTÊNCIA: verificar se o messageId já foi processado antes de iniciar qualquer lógica
+    const messageId: string | undefined = key?.id;
+    if (messageId) {
+      const { data: msgExistente } = await supabaseAdmin.from("mensagens")
+        .select("id").eq("stevo_message_id", messageId).limit(1).maybeSingle();
+      if (msgExistente) {
+        console.log("[idempotencia] messageId já processado:", messageId);
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_message_id" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+    }
+
     if (!text) return new Response(JSON.stringify({ ok: true, ignored: "sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
     // Carregar configurações — sempre a row mais recente
@@ -322,12 +318,14 @@ async function handleWebhook(request: Request): Promise<Response> {
       }
     }
 
-    // Se ainda não existe, cria
+    // Se ainda não existe, cria via upsert atômico para evitar race condition entre mensagens paralelas
     if (!conversa) {
-      const { data: nova } = await supabaseAdmin.from("conversas")
-        .insert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" })
+      const { data: nova, error: errConv } = await supabaseAdmin.from("conversas")
+        .upsert({ sessao_token, canal: "whatsapp", cliente_id: cliente?.id, tipo_conversa: "receptivo" }, { onConflict: "sessao_token", ignoreDuplicates: false })
         .select("*").maybeSingle();
-      conversa = nova;
+      if (errConv) console.error("[conversas upsert]", errConv.message);
+      // Se upsert retornou vazio (concurrent insert ganhou a race), buscar o registro criado pelo outro processo
+      conversa = nova ?? (await supabaseAdmin.from("conversas").select("*").eq("sessao_token", sessao_token).maybeSingle()).data;
     }
     if (!conversa) throw new Error("Falha ao criar/encontrar conversa");
 
@@ -340,6 +338,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       .order("criado_em", { ascending: true })
       .limit(50);
     // Garantir ao menos as últimas 10 mensagens independente de data
+    // O fallback complementa o hist existente em vez de substituí-lo
     let hist = histRaw ?? [];
     if (hist.length < 10) {
       const { data: recent } = await supabaseAdmin.from("mensagens")
@@ -347,11 +346,15 @@ async function handleWebhook(request: Request): Promise<Response> {
         .eq("conversa_id", conversa.id)
         .order("criado_em", { ascending: false })
         .limit(10);
-      hist = (recent ?? []).reverse();
+      const recentOrdenado = (recent ?? []).reverse();
+      // Mesclar: adicionar mensagens do fallback que não estão já no hist (por criado_em)
+      const histTimestamps = new Set(hist.map((m: any) => m.criado_em));
+      const extras = recentOrdenado.filter((m: any) => !histTimestamps.has(m.criado_em));
+      hist = [...extras, ...hist].sort((a: any, b: any) => a.criado_em < b.criado_em ? -1 : 1).slice(-10);
     }
 
-    // Agora inserir a mensagem do usuário
-    const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao });
+    // Agora inserir a mensagem do usuário (com stevo_message_id para idempotência em retries futuros)
+    const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao, ...(messageId ? { stevo_message_id: messageId } : {}) });
     if (errMsgUser) console.error("[mensagens insert user]", errMsgUser);
 
     if (cliente?.id) await supabaseAdmin.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
@@ -540,8 +543,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     const cepNaMsg = extrairCep(text);
     const cepSalvo = (cliente?.cep as string | undefined) ?? ((conversa.contexto as any)?.cep as string | undefined) ?? null;
     const cepUsar = cepNaMsg ?? cepSalvo;
-    // querFrete: também ativa quando cliente já tem CEP salvo e menciona frete de alguma forma — evita loop de pedido de CEP
-    const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg || (!!cepSalvo && /\b(frete|entrega|envio|prazo|chegar|chegará|quanto\s+fica|quanto\s+custa)\b/i.test(text));
+    const querFrete = detectaIntencaoFrete(text) || !!cepNaMsg;
 
     // Salvar CEP sempre que informado pelo cliente, independente do resultado do frete
     if (cepNaMsg && cliente?.id) {
@@ -615,12 +617,19 @@ async function handleWebhook(request: Request): Promise<Response> {
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
+    // hist foi buscado ANTES do insert da mensagem atual, mas em retries o hist pode já conter a mensagem atual
     const historicoMessages = hist
       .filter((m: any) => m.papel === "user" || m.papel === "assistant")
       .map((m: any) => ({ role: m.papel as "user" | "assistant", content: String(m.conteudo ?? "") }));
 
+    // Remover a última mensagem do histórico se for duplicata da mensagem atual (cenário de retry)
+    const ultimaMsgHist = historicoMessages[historicoMessages.length - 1];
+    const histSemDuplicata = (ultimaMsgHist?.role === "user" && ultimaMsgHist?.content.trim() === text.trim())
+      ? historicoMessages.slice(0, -1)
+      : historicoMessages;
+
     // Garantir que o array termina com a msg do usuário atual (não duplicada)
-    const messagesParaIA = [...historicoMessages, { role: "user" as const, content: text }];
+    const messagesParaIA = [...histSemDuplicata, { role: "user" as const, content: text }];
 
     // Chamar Anthropic com timeout de 25s
     const ac = new AbortController();
@@ -727,12 +736,6 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Enviar blocos com delay entre mensagens e verificação de falha
     const blocosEnvio = separarMensagens(reply);
-    // Verificar duplicata antes de enviar (anti-loop de 30s)
-    const isDuplicata = await verificarDuplicata(conversa.id, reply);
-    if (isDuplicata) {
-      console.log("[dedup] mensagem duplicada suprimida:", reply.slice(0, 80));
-      return new Response(JSON.stringify({ ok: true, dedup: true }), { headers: { ...cors, "Content-Type": "application/json" } });
-    }
     for (let i = 0; i < blocosEnvio.length; i++) {
       if (i > 0) await new Promise((r) => setTimeout(r, 800));
       const resp = await enviarTexto(numero, blocosEnvio[i], stevoKey);

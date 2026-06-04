@@ -33,7 +33,10 @@ async function processFollowUps() {
     supabaseAdmin.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
   ]);
   if (!cfg || !cfgAg) return { ok: true, skipped: "config não encontrada" };
-  if (cfgAg.followup_ativo === false) return { ok: true, skipped: "follow-up desativado" };
+  // Correção PROBLEMA 2: verificar ambos os nomes possíveis do campo
+  if ((cfgAg as any).followup_ativo === false || (cfgAg as any).follow_up_ativo === false) return { ok: true, skipped: "follow-up desativado" };
+  // Correção PROBLEMA 2: verificar também na tabela configuracoes
+  if ((cfg as any).follow_up_ativo === false || (cfg as any).followup_ativo === false) return { ok: true, skipped: "follow-up desativado (configuracoes)" };
   if (cfgAg.respeitar_horario && !dentroDoHorario(cfgAg)) return { ok: true, skipped: "fora do horário" };
 
   const agora = new Date().toISOString();
@@ -42,6 +45,8 @@ async function processFollowUps() {
   // Elegíveis: conversas whatsapp, última msg assistant, ainda dentro do ciclo de dias, com proximo_followup_em vencido (ou sem agendamento ainda)
   const diasTotal = Number(cfgAg.dias_total ?? 7);
   const limiteInicial = new Date(Date.now() - Number(cfgAg.fup1_horas ?? 3) * 3600_000).toISOString();
+  // Correção PROBLEMA 2 (conversa ativa): exigir que a última msg tenha pelo menos 2h de silêncio
+  const limite2h = new Date(Date.now() - 2 * 3600_000).toISOString();
 
   const { data: conversas } = await supabaseAdmin
     .from("conversas")
@@ -53,7 +58,12 @@ async function processFollowUps() {
     .lt("ultima_mensagem_em", limiteInicial)
     .limit(50);
 
-  const elegiveis = (conversas ?? []).filter((c) => !c.proximo_followup_em || c.proximo_followup_em <= agora);
+  // Correção PROBLEMA 2: filtrar conversas com mensagem do usuário nas últimas 2h
+  // (buscar a msg mais recente de cada conversa e checar se é do usuário e recente)
+  // Também aplicar limite de 2h sobre ultima_mensagem_em independente do papel
+  const conversasFiltradas = (conversas ?? []).filter((c) => !c.ultima_mensagem_em || c.ultima_mensagem_em < limite2h);
+
+  const elegiveis = conversasFiltradas.filter((c) => !c.proximo_followup_em || c.proximo_followup_em <= agora);
   if (!elegiveis.length) return { ok: true, processadas: 0 };
 
   const [{ data: produtosTodos }, { data: cupons }, { data: faqs }] = await Promise.all([
@@ -66,12 +76,34 @@ async function processFollowUps() {
 
   for (const conv of elegiveis) {
     try {
-      const [{ data: hist }, { data: cliente }] = await Promise.all([
-        supabaseAdmin.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conv.id).order("criado_em", { ascending: true }).limit(30),
+      const [{ data: histRaw }, { data: cliente }] = await Promise.all([
+        // Correção PROBLEMA 6: pegar as ÚLTIMAS 30 mensagens (desc) e inverter para ordem cronológica
+        supabaseAdmin.from("mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conv.id).order("criado_em", { ascending: false }).limit(30),
         conv.cliente_id
           ? supabaseAdmin.from("clientes").select("*").eq("id", conv.cliente_id).maybeSingle()
           : Promise.resolve({ data: null as any }),
       ]);
+
+      // Correção PROBLEMA 6: inverter para ordem cronológica ascendente
+      const hist = (histRaw ?? []).reverse();
+
+      // Correção PROBLEMA 1 (race condition): verificar se cliente respondeu após a query inicial
+      const ultimaMsgHist = hist.length > 0 ? hist[hist.length - 1] : null;
+      if (ultimaMsgHist && ultimaMsgHist.papel === "user") {
+        resultados.push({ conv: conv.id, skipped: "cliente respondeu (race condition)" });
+        continue;
+      }
+
+      // Correção PROBLEMA 1: verificar diretamente no banco se última msg é do usuário
+      const { data: convAtual } = await supabaseAdmin
+        .from("conversas")
+        .select("ultima_mensagem_papel, precisa_humano")
+        .eq("id", conv.id)
+        .single();
+      if (convAtual?.ultima_mensagem_papel !== "assistant" || convAtual?.precisa_humano === true) {
+        resultados.push({ conv: conv.id, skipped: "cliente respondeu ou humano assumiu (re-verificação)" });
+        continue;
+      }
 
       // Correção: zerar fups_enviados_hoje se o proximo_followup_em era de um dia anterior
       const proximoFollowupDia = conv.proximo_followup_em ? conv.proximo_followup_em.slice(0, 10) : null;
@@ -122,8 +154,12 @@ async function processFollowUps() {
       const reply = replyRaw.replace(/\[ESCALAR\]/gi, "").trim();
 
       if (precisaEscalar) {
-        // Marcar como precisa de humano e parar o ciclo de follow-up para esta conversa
-        await supabaseAdmin.from("conversas").update({ precisa_humano: true }).eq("id", conv.id);
+        // Correção PROBLEMA 4/req4: Marcar como precisa de humano com motivo e timestamp
+        await supabaseAdmin.from("conversas").update({
+          precisa_humano: true,
+          motivo_humano: "Escalado pelo follow-up automático",
+          humano_em: new Date().toISOString(),
+        }).eq("id", conv.id);
         resultados.push({ conv: conv.id, ok: true, escalado: true, dia: diaAtual });
         continue;
       }

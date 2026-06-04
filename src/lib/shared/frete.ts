@@ -10,20 +10,28 @@ export function extrairCep(texto: string): string | null {
 }
 
 export function detectaIntencaoFrete(texto: string): boolean {
-  const t = texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
   return /(frete|entrega|envio|chega(r)?(\s+em)?|prazo|quanto.*(?:mandar|enviar|frete|entreg)|sedex|pac\b|correios|transportadora|cep|demora\s+(pra|para)\s+chegar|dias\s+(uteis|pra))/.test(t);
 }
 
 type Conn = { store_id: string; access_token: string; dominio_loja?: string | null };
 
+// ─── Cache de conexão NS (evita SELECT por request) ───────────────────────────
+let _connCache: { conn: Conn; expira: number } | null = null;
+const CONN_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
 export async function carregarConexaoNS(supabase: any): Promise<Conn | null> {
+  const agora = Date.now();
+  if (_connCache && agora < _connCache.expira) return _connCache.conn;
   const { data } = await supabase
     .from("nuvemshop_connections")
     .select("store_id, access_token, dominio_loja")
     .order("atualizado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data ?? null;
+  if (!data) return null;
+  _connCache = { conn: data, expira: agora + CONN_TTL_MS };
+  return data;
 }
 
 type Item = { variant_id?: string | null; product_id?: string | null; quantity: number; product_url?: string | null };
@@ -40,21 +48,34 @@ function lojaBase(conn: Conn, productUrl?: string | null): string | null {
   }
 }
 
+// Resolve variant_id para um único item. Adiciona timeout de 8s.
 async function resolverVariantId(conn: Conn, item: Item): Promise<string | null> {
   if (item.variant_id) return String(item.variant_id);
   if (!item.product_id) return null;
   const url = `${NS_API}/${conn.store_id}/products/${item.product_id}`;
-  const res = await fetch(url, {
-    headers: {
-      Authentication: `bearer ${conn.access_token}`,
-      "User-Agent": UA,
-      "Content-Type": "application/json",
-    },
-  });
-  if (!res.ok) return null;
-  const product = await res.json().catch(() => null);
-  const variant = product?.variants?.[0]?.id;
-  return variant != null ? String(variant) : null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Authentication: `bearer ${conn.access_token}`,
+        "User-Agent": UA,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    const product = await res.json().catch(() => null);
+    const variant = product?.variants?.[0]?.id;
+    return variant != null ? String(variant) : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Resolve variant_id para todos os itens de uma vez.
+async function resolverVariantIds(conn: Conn, itens: Item[]): Promise<(string | null)[]> {
+  return Promise.all(itens.map((item) => resolverVariantId(conn, item)));
 }
 
 function attr(tag: string, name: string): string | null {
@@ -71,6 +92,9 @@ function parsePreco(value: string | null): number {
 
 function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
   const inputs = html.match(/<input[^>]+class="[^"]*js-shipping-method[^"]*"[^>]*>/gi) ?? [];
+  if (inputs.length === 0) {
+    console.warn("[frete-ns-storefront] HTML sem inputs js-shipping-method — template pode ter mudado");
+  }
   const opcoes = inputs.map((tag) => {
     const nomeRaw = attr(tag, "data-name") ?? "Frete";
     const dataCost = attr(tag, "data-cost");
@@ -83,7 +107,7 @@ function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
     const nome = (dashIdx > -1 ? nomeRaw.slice(0, dashIdx) : nomeRaw).replace(/\s+/g, " ").trim();
     const chegaStr = dashIdx > -1 ? nomeRaw.slice(dashIdx + 3).trim() : null; // "Chega entre..."
     return { nome, preco, prazo_dias: null as number | null, chega: chegaStr };
-  }).filter((o) => o.nome && o.preco >= 0);
+  }).filter((o) => o.preco >= 0 && o.nome.length > 0);
   const seen = new Set<string>();
   return opcoes.filter((o) => {
     const key = `${o.nome}-${o.preco}`;
@@ -91,6 +115,21 @@ function parseOpcoesDoHtml(html: string): OpcaoFrete[] {
     seen.add(key);
     return true;
   });
+}
+
+// ─── Cache de frete em memória por (cep + variant_ids) ────────────────────────
+type FreteCache = { resultado: { ok: true; opcoes: OpcaoFrete[] }; expira: number };
+const _freteCache = new Map<string, FreteCache>();
+const FRETE_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+function freteChave(cep: string, variantIds: (string | null)[]): string {
+  return `${cep.replace(/\D/g, "")}:${variantIds.filter(Boolean).join(",")}`;
+}
+
+function fetchComTimeout(url: string, init: RequestInit, timeoutMs = 9000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
 export async function calcularFreteNuvemshop(params: {
@@ -102,18 +141,32 @@ export async function calcularFreteNuvemshop(params: {
   if (!itens.length) return { ok: false, erro: "Sem itens para cotação." };
 
   try {
-    const variantId = await resolverVariantId(conn, itens[0]);
-    if (!variantId) return { ok: false, erro: "Produto sem variante Nuvemshop para cotação." };
+    // Resolve variant_id para TODOS os itens (não só o primeiro)
+    const variantIds = await resolverVariantIds(conn, itens);
+    const primeiroVariantId = variantIds[0];
+    if (!primeiroVariantId) return { ok: false, erro: "Produto sem variante Nuvemshop para cotação." };
+
+    // Verifica cache antes de chamar a API
+    const chaveCache = freteChave(cep, variantIds);
+    const agora = Date.now();
+    const cached = _freteCache.get(chaveCache);
+    if (cached && agora < cached.expira) {
+      return cached.resultado;
+    }
 
     // Usa a API Admin primeiro — retorna valores REAIS da transportadora sem aplicar promoções.
     // O storefront /frete/ aplica regras de frete grátis e retorna R$0, o que é enganoso quando
     // o cliente ainda não atingiu o valor mínimo para a promoção.
     const adminUrl = `${NS_API}/${conn.store_id}/orders/shipping_quote`;
     const adminBody = {
-      items: itens.map((i) => ({ variant_id: Number(i.variant_id ?? variantId), quantity: i.quantity })),
+      // Cada item usa seu próprio variant_id resolvido (não o do primeiro para todos)
+      items: itens.map((item, idx) => ({
+        variant_id: Number(variantIds[idx] ?? primeiroVariantId),
+        quantity: item.quantity,
+      })),
       shipping_address: { zipcode: cep.replace(/\D/g, "") },
     };
-    const adminRes = await fetch(adminUrl, {
+    const adminRes = await fetchComTimeout(adminUrl, {
       method: "POST",
       headers: {
         Authentication: `bearer ${conn.access_token}`,
@@ -127,17 +180,25 @@ export async function calcularFreteNuvemshop(params: {
       let adminJson: any;
       try { adminJson = JSON.parse(adminTxt); } catch { adminJson = null; }
       if (adminJson) {
-        const lista: any[] = Array.isArray(adminJson) ? adminJson
-          : (adminJson?.rates ?? adminJson?.shipping_options ?? adminJson?.options ?? []);
+        // API Admin retorna objeto (nunca array direto), priorizar rates > shipping_options > options
+        const lista: any[] = Array.isArray(adminJson)
+          ? adminJson
+          : (adminJson?.rates?.length ? adminJson.rates
+            : adminJson?.shipping_options?.length ? adminJson.shipping_options
+            : adminJson?.options?.length ? adminJson.options
+            : []);
         const opcoes: OpcaoFrete[] = lista.map((r: any) => ({
           nome: String(r.name ?? r.shipping_name ?? r.title ?? r.carrier ?? "Frete"),
-          preco: Number(r.price ?? r.cost ?? r.amount ?? 0),
+          // Null-check explícito: r.price === 0 (frete grátis) é válido; usa cost/amount só se price ausente
+          preco: r.price != null ? Number(r.price) : (r.cost != null ? Number(r.cost) : Number(r.amount ?? 0)),
           prazo_dias: r.delivery_time != null ? Number(r.delivery_time) : r.days != null ? Number(r.days) : null,
           chega: null,
-        })).filter((o) => o.preco >= 0 && o.nome);
+        })).filter((o) => o.preco >= 0 && o.nome.length > 0);
         if (opcoes.length) {
           opcoes.sort((a, b) => a.preco - b.preco);
-          return { ok: true, opcoes: opcoes.slice(0, 4) };
+          const resultado = { ok: true as const, opcoes: opcoes.slice(0, 4) };
+          _freteCache.set(chaveCache, { resultado, expira: agora + FRETE_TTL_MS });
+          return resultado;
         }
       }
       console.error("[frete-ns-admin] sem opções", adminTxt.slice(0, 400));
@@ -146,20 +207,24 @@ export async function calcularFreteNuvemshop(params: {
     }
 
     // Fallback: storefront /frete/ (retorna preço promocional, mas é melhor que nada)
-    const base = lojaBase(conn, itens[0].product_url) ?? "https://www.douramor.com.br";
+    const base = lojaBase(conn, itens[0].product_url);
+    if (!base) {
+      console.warn("[frete-ns-storefront] lojaBase retornou null — dominio_loja ausente e product_url ausente");
+    }
+    const baseUrl = base ?? "https://www.douramor.com.br";
     const form = new URLSearchParams({
       cep: cep.replace(/\D/g, ""),
-      variant_id: variantId,
+      variant_id: primeiroVariantId,
       quantity: String(Math.max(1, itens[0].quantity || 1)),
       originShippingCalculation: "productDetail",
     });
-    const storefrontRes = await fetch(`${base}/frete/`, {
+    const storefrontRes = await fetchComTimeout(`${baseUrl}/frete/`, {
       method: "POST",
       headers: {
         "User-Agent": UA,
         "Content-Type": "application/x-www-form-urlencoded",
         "X-Requested-With": "XMLHttpRequest",
-        Referer: itens[0].product_url || base,
+        Referer: itens[0].product_url || baseUrl,
       },
       body: form.toString(),
     });
@@ -171,15 +236,21 @@ export async function calcularFreteNuvemshop(params: {
         const opcoesStorefront = parseOpcoesDoHtml(String(payload.html));
         if (opcoesStorefront.length) {
           opcoesStorefront.sort((a, b) => a.preco - b.preco);
-          return { ok: true, opcoes: opcoesStorefront.slice(0, 4) };
+          const resultado = { ok: true as const, opcoes: opcoesStorefront.slice(0, 4) };
+          _freteCache.set(chaveCache, { resultado, expira: agora + FRETE_TTL_MS });
+          return resultado;
         }
       }
     }
 
     return { ok: false, erro: "Não foi possível calcular o frete." };
-  } catch (e) {
+  } catch (e: any) {
     console.error("[frete-ns] exception", e);
-    return { ok: false, erro: (e as Error).message };
+    // Sanitiza mensagem de erro — não expõe URLs internas, tokens ou detalhes de rede
+    const msg = e?.name === "AbortError"
+      ? "Tempo limite excedido ao consultar frete."
+      : "Erro ao consultar frete. Tente novamente.";
+    return { ok: false, erro: msg };
   }
 }
 
