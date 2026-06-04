@@ -129,18 +129,23 @@ async function handleWebhook(request: Request): Promise<Response> {
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY ?? "";
 
     // Áudio: transcreve via Groq Whisper; se falhar, pede para escrever
-    const audioUrl: string | undefined =
-      message?.audioMessage?.url ??
-      message?.audioMessage?.mediaUrl ??
-      info?.audioMessage?.url ??
-      info?.audioMessage?.mediaUrl ??
-      data?.audioMessage?.url ??
-      data?.audioMessage?.mediaUrl ??
-      data?.audio?.url ??
-      data?.audio?.mediaUrl ??
-      data?.mediaUrl?.audio ??
-      data?.mediaUrl ??
-      data?.url;
+    // IMPORTANTE: não usar data?.url ou data?.mediaUrl genérico — capturaria URLs de produto em ecos
+    const isAudioType = !!(
+      message?.audioMessage || data?.audioMessage ||
+      info?.MediaType === "ptt" || info?.MediaType === "audio" ||
+      data?.type === "ptt" || data?.type === "audio"
+    );
+    const audioUrl: string | undefined = isAudioType
+      ? (message?.audioMessage?.url ??
+         message?.audioMessage?.mediaUrl ??
+         info?.audioMessage?.url ??
+         info?.audioMessage?.mediaUrl ??
+         data?.audioMessage?.url ??
+         data?.audioMessage?.mediaUrl ??
+         data?.audio?.url ??
+         data?.audio?.mediaUrl ??
+         data?.mediaUrl?.audio)
+      : undefined;
     const audioBase64: string | undefined =
       data?.base64 ??
       message?.base64 ??
@@ -152,12 +157,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       data?.audioMessage?.mimetype ??
       info?.mimetype ??
       "audio/ogg; codecs=opus";
-    const isAudio = !!(
-      audioUrl || audioBase64 ||
-      info?.MediaType === "ptt" || info?.MediaType === "audio" ||
-      data?.type === "ptt" || data?.type === "audio" ||
-      message?.audioMessage || data?.audioMessage
-    );
+    const isAudio = !!(audioUrl || audioBase64 || isAudioType);
 
     if (isAudio) {
       console.log("[audio-detect] audioUrl:", audioUrl, "| base64:", audioBase64 ? `${audioBase64.length}chars` : "none", "| mimetype:", audioMimetype, "| isAudio:", isAudio);
@@ -184,13 +184,18 @@ async function handleWebhook(request: Request): Promise<Response> {
         console.warn("[audio] falha na transcrição — audioUrl:", audioUrl, "base64:", !!audioBase64);
         if (remoteJid) {
           const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
-          // Evitar enviar MSG_AUDIO_FAIL múltiplas vezes para a mesma conversa em 5min
+          const sessaoAudio = `wa:${numAudio}`;
+          // Evitar enviar MSG_AUDIO_FAIL múltiplas vezes — busca no banco E salva antes de enviar
           const cincoMinAtras = new Date(Date.now() - 300_000).toISOString();
-          const { data: convExiste } = await supabaseAdmin.from("conversas").select("id").eq("sessao_token", `wa:${numAudio}`).maybeSingle();
+          const { data: convExiste } = await supabaseAdmin.from("conversas").select("id").eq("sessao_token", sessaoAudio).maybeSingle();
           const { data: audioFailRecente } = convExiste ? await supabaseAdmin.from("mensagens")
             .select("id").eq("conversa_id", convExiste.id).eq("papel", "assistant")
-            .ilike("conteudo", "%áudio%").gte("criado_em", cincoMinAtras).limit(1).maybeSingle() : { data: null };
+            .eq("conteudo", MSG_AUDIO_FAIL).gte("criado_em", cincoMinAtras).limit(1).maybeSingle() : { data: null };
           if (!audioFailRecente) {
+            // Salva no banco ANTES de enviar — garante deduplicação mesmo em retries paralelos
+            if (convExiste) {
+              await supabaseAdmin.from("mensagens").insert({ conversa_id: convExiste.id, papel: "assistant", conteudo: MSG_AUDIO_FAIL });
+            }
             await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);
           } else {
             console.log("[audio] MSG_AUDIO_FAIL suprimida — já enviada nos últimos 5min");
