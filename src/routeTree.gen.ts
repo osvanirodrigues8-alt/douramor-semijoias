@@ -31,6 +31,7 @@ import { Route as ApiPublicRevisaoIaCronRouteImport } from './routes/api/public/
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
 import { Route as ApiPublicMetaAdsRouteImport } from './routes/api/public/meta-ads'
 import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
+import { Route as ApiPublicEnviarMensagemRouteImport } from './routes/api/public/enviar-mensagem'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
 import { Route as AppFluxosIdRouteImport } from './routes/_app/fluxos_.$id'
@@ -147,6 +148,11 @@ const ApiPublicFollowUpCronRoute = ApiPublicFollowUpCronRouteImport.update({
   path: '/api/public/follow-up-cron',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicEnviarMensagemRoute = ApiPublicEnviarMensagemRouteImport.update({
+  id: '/api/public/enviar-mensagem',
+  path: '/api/public/enviar-mensagem',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicChatRoute = ApiPublicChatRouteImport.update({
   id: '/api/public/chat',
   path: '/api/public/chat',
@@ -195,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/enviar-mensagem': typeof ApiPublicEnviarMensagemRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -223,6 +230,7 @@ export interface FileRoutesByTo {
   '/fluxos/$id': typeof AppFluxosIdRoute
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/enviar-mensagem': typeof ApiPublicEnviarMensagemRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -253,6 +261,7 @@ export interface FileRoutesById {
   '/_app/fluxos_/$id': typeof AppFluxosIdRoute
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
+  '/api/public/enviar-mensagem': typeof ApiPublicEnviarMensagemRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
   '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/fluxos/$id'
     | '/integracoes/nuvemshop'
     | '/api/public/chat'
+    | '/api/public/enviar-mensagem'
     | '/api/public/follow-up-cron'
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/fluxos/$id'
     | '/integracoes/nuvemshop'
     | '/api/public/chat'
+    | '/api/public/enviar-mensagem'
     | '/api/public/follow-up-cron'
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
@@ -340,6 +351,7 @@ export interface FileRouteTypes {
     | '/_app/fluxos_/$id'
     | '/_app/integracoes/nuvemshop'
     | '/api/public/chat'
+    | '/api/public/enviar-mensagem'
     | '/api/public/follow-up-cron'
     | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
@@ -354,6 +366,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
+  ApiPublicEnviarMensagemRoute: typeof ApiPublicEnviarMensagemRoute
   ApiPublicFollowUpCronRoute: typeof ApiPublicFollowUpCronRoute
   ApiPublicMetaAdsRoute: typeof ApiPublicMetaAdsRoute
   ApiPublicPosVendaCronRoute: typeof ApiPublicPosVendaCronRoute
@@ -519,6 +532,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicFollowUpCronRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/enviar-mensagem': {
+      id: '/api/public/enviar-mensagem'
+      path: '/api/public/enviar-mensagem'
+      fullPath: '/api/public/enviar-mensagem'
+      preLoaderRoute: typeof ApiPublicEnviarMensagemRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/chat': {
       id: '/api/public/chat'
       path: '/api/public/chat'
@@ -602,6 +622,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
+  ApiPublicEnviarMensagemRoute: ApiPublicEnviarMensagemRoute,
   ApiPublicFollowUpCronRoute: ApiPublicFollowUpCronRoute,
   ApiPublicMetaAdsRoute: ApiPublicMetaAdsRoute,
   ApiPublicPosVendaCronRoute: ApiPublicPosVendaCronRoute,
