@@ -58,6 +58,25 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
+// Rate-limit por número: máx 30 mensagens em 60s — proteção contra flood
+const rateLimitMap = new Map<string, number[]>();
+function verificarRateLimit(numero: string): boolean {
+  const agora = Date.now();
+  const janela = 60_000;
+  const max = 30;
+  const timestamps = (rateLimitMap.get(numero) ?? []).filter(t => agora - t < janela);
+  timestamps.push(agora);
+  rateLimitMap.set(numero, timestamps);
+  return timestamps.length > max;
+}
+
+// Mascarar PII (CPF, cartão) antes de passar para a IA
+function mascararPII(texto: string): string {
+  return texto
+    .replace(/\b\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[-\.\s]?\d{2}\b/g, "[CPF ocultado]")
+    .replace(/\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g, "[cartão ocultado]");
+}
+
 async function handleWebhook(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
@@ -234,6 +253,12 @@ async function handleWebhook(request: Request): Promise<Response> {
     // Normalizar número e sessao_token pelo número (não pelo JID completo — evita fragmentação por dispositivo)
     const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
     const sessao_token = `wa:${numero}`;
+
+    // Rate-limit: bloquear flood de mensagens
+    if (!fromMe && verificarRateLimit(numero)) {
+      console.warn("[rate-limit] número bloqueado por excesso de mensagens:", numero);
+      return new Response(JSON.stringify({ ok: true, ignored: "rate_limit" }), { headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     if (fromMe) {
       if (!text) return new Response(JSON.stringify({ ok: true, ignored: "fromMe sem texto" }), { headers: { ...cors, "Content-Type": "application/json" } });
@@ -628,8 +653,11 @@ async function handleWebhook(request: Request): Promise<Response> {
       ? historicoMessages.slice(0, -1)
       : historicoMessages;
 
-    // Garantir que o array termina com a msg do usuário atual (não duplicada)
-    const messagesParaIA = [...histSemDuplicata, { role: "user" as const, content: text }];
+    // Mascarar PII e garantir que o array termina com a msg do usuário atual
+    const messagesParaIA = [
+      ...histSemDuplicata.map((m: any) => ({ ...m, content: mascararPII(m.content) })),
+      { role: "user" as const, content: mascararPII(text) },
+    ];
 
     // Chamar Anthropic com timeout de 25s
     const ac = new AbortController();
