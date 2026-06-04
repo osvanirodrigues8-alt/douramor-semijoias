@@ -76,7 +76,7 @@ function Melhorias() {
   const [loading, setLoading] = useState(true);
   const [aplicando, setAplicando] = useState<string | null>(null);
   const [analisando, setAnalisando] = useState(false);
-  const [ultimaAnalise, setUltimaAnalise] = useState<{ analisadas: number; comProblema: number } | null>(null);
+  const [ultimaAnalise, setUltimaAnalise] = useState<{ analisadas: number; comProblema: number; notaMedia?: string } | null>(null);
 
   const [filtroStatus, setFiltroStatus] = useState("pendente");
   const [filtroTipo, setFiltroTipo] = useState("todos");
@@ -143,7 +143,7 @@ function Melhorias() {
       const res = await fetch("/api/public/trigger-auditoria", { method: "POST" });
       const data = await res.json();
       if (data.ok) {
-        setUltimaAnalise({ analisadas: data.analisadas ?? 0, comProblema: data.comProblema ?? 0 });
+        setUltimaAnalise({ analisadas: data.analisadas ?? 0, comProblema: data.comProblema ?? 0, notaMedia: data.notaMedia });
       }
     } catch {
       // silencioso — resultados aparecem via Realtime
@@ -187,15 +187,16 @@ function Melhorias() {
           </Button>
           {ultimaAnalise && !analisando && (
             <p className="text-xs text-muted-foreground">
-              ✓ {ultimaAnalise.analisadas} conversas analisadas
+              ✓ {ultimaAnalise.analisadas} analisadas
+              {ultimaAnalise.notaMedia ? ` · nota média ${ultimaAnalise.notaMedia}/10` : ""}
               {ultimaAnalise.comProblema > 0
-                ? ` — ${ultimaAnalise.comProblema} problema(s) encontrado(s)`
-                : " — nenhum problema crítico"}
+                ? ` · ${ultimaAnalise.comProblema} com problema(s)`
+                : " · nenhum problema crítico"}
             </p>
           )}
           {analisando && (
             <p className="text-xs text-muted-foreground animate-pulse">
-              Claude está lendo as conversas das últimas 48h...
+              Claude Sonnet analisando conversas das últimas 48h...
             </p>
           )}
         </div>
