@@ -16,6 +16,7 @@ import {
 } from "@/lib/shared/prompt";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
+import { detectarProblemasConversa, registrarFeedback } from "@/lib/shared/auditoria";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
 const MSG_HUMANO = "Deixa eu verificar isso aqui com mais calma pra você — um momento 💛";
@@ -167,6 +168,15 @@ async function handleWebhook(request: Request): Promise<Response> {
         if (remoteJid) {
           const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
           await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);
+        }
+        // Registrar falha de áudio para auditoria
+        if (conversa?.id) {
+          registrarFeedback(supabaseAdmin, {
+            conversaId: conversa.id,
+            tipo: "auto_timeout",
+            severidade: "baixa",
+            descricao: "Transcrição de áudio falhou — cliente recebeu pedido para escrever",
+          }).catch(() => {});
         }
         return new Response(JSON.stringify({ ok: true, audio_fail: true }), { headers: { ...cors, "Content-Type": "application/json" } });
       }
@@ -628,6 +638,22 @@ async function handleWebhook(request: Request): Promise<Response> {
     // Inserir mensagem assistente separado dos updates de metadados
     const { error: errMsgAss } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
     if (errMsgAss) console.error("[mensagens insert assistant]", errMsgAss);
+
+    // ─── Auditoria automática (nunca derruba o fluxo principal) ─────────────
+    try {
+      await detectarProblemasConversa({
+        supabase: supabaseAdmin,
+        conversaId: conversa.id,
+        hist,
+        textoUsuario: text,
+        respostaIA: reply,
+        mensagemId: null,
+        marcarHumano,
+      });
+    } catch (auditErr) {
+      console.error("[auditoria-auto]", (auditErr as Error).message);
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     // Updates de metadados (best-effort)
     await Promise.all([

@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
 import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
+import { Route as AppMelhoriasRouteImport } from './routes/_app/melhorias'
 import { Route as AppFluxosRouteImport } from './routes/_app/fluxos'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppCuponsRouteImport } from './routes/_app/cupons'
@@ -22,10 +23,13 @@ import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoe
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppAvaliacoesRouteImport } from './routes/_app/avaliacoes'
 import { Route as AppAtendimentoRouteImport } from './routes/_app/atendimento'
+import { Route as AppAnunciosRouteImport } from './routes/_app/anuncios'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
+import { Route as ApiPublicRevisaoIaCronRouteImport } from './routes/api/public/revisao-ia-cron'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
+import { Route as ApiPublicMetaAdsRouteImport } from './routes/api/public/meta-ads'
 import { Route as ApiPublicFollowUpCronRouteImport } from './routes/api/public/follow-up-cron'
 import { Route as ApiPublicChatRouteImport } from './routes/api/public/chat'
 import { Route as AppIntegracoesNuvemshopRouteImport } from './routes/_app/integracoes/nuvemshop'
@@ -60,6 +64,11 @@ const AppProdutosRoute = AppProdutosRouteImport.update({
 const AppPedidosRoute = AppPedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMelhoriasRoute = AppMelhoriasRouteImport.update({
+  id: '/melhorias',
+  path: '/melhorias',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFluxosRoute = AppFluxosRouteImport.update({
@@ -97,6 +106,11 @@ const AppAtendimentoRoute = AppAtendimentoRouteImport.update({
   path: '/atendimento',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAnunciosRoute = AppAnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAgenteRoute = AppAgenteRouteImport.update({
   id: '/agente',
   path: '/agente',
@@ -113,9 +127,19 @@ const ApiPublicWhatsappWebhookRoute =
     path: '/api/public/whatsapp-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicRevisaoIaCronRoute = ApiPublicRevisaoIaCronRouteImport.update({
+  id: '/api/public/revisao-ia-cron',
+  path: '/api/public/revisao-ia-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicPosVendaCronRoute = ApiPublicPosVendaCronRouteImport.update({
   id: '/api/public/pos-venda-cron',
   path: '/api/public/pos-venda-cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicMetaAdsRoute = ApiPublicMetaAdsRouteImport.update({
+  id: '/api/public/meta-ads',
+  path: '/api/public/meta-ads',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicFollowUpCronRoute = ApiPublicFollowUpCronRouteImport.update({
@@ -156,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/agendamentos': typeof AppAgendamentosRoute
   '/agente': typeof AppAgenteRoute
+  '/anuncios': typeof AppAnunciosRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/avaliacoes': typeof AppAvaliacoesRoute
   '/clientes': typeof AppClientesRoute
@@ -163,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
   '/fluxos': typeof AppFluxosRoute
+  '/melhorias': typeof AppMelhoriasRoute
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -170,7 +196,9 @@ export interface FileRoutesByFullPath {
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
+  '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -180,6 +208,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/agendamentos': typeof AppAgendamentosRoute
   '/agente': typeof AppAgenteRoute
+  '/anuncios': typeof AppAnunciosRoute
   '/atendimento': typeof AppAtendimentoRoute
   '/avaliacoes': typeof AppAvaliacoesRoute
   '/clientes': typeof AppClientesRoute
@@ -187,6 +216,7 @@ export interface FileRoutesByTo {
   '/cupons': typeof AppCuponsRoute
   '/dashboard': typeof AppDashboardRoute
   '/fluxos': typeof AppFluxosRoute
+  '/melhorias': typeof AppMelhoriasRoute
   '/pedidos': typeof AppPedidosRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -194,7 +224,9 @@ export interface FileRoutesByTo {
   '/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
+  '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -206,6 +238,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/agendamentos': typeof AppAgendamentosRoute
   '/_app/agente': typeof AppAgenteRoute
+  '/_app/anuncios': typeof AppAnunciosRoute
   '/_app/atendimento': typeof AppAtendimentoRoute
   '/_app/avaliacoes': typeof AppAvaliacoesRoute
   '/_app/clientes': typeof AppClientesRoute
@@ -213,6 +246,7 @@ export interface FileRoutesById {
   '/_app/cupons': typeof AppCuponsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/fluxos': typeof AppFluxosRoute
+  '/_app/melhorias': typeof AppMelhoriasRoute
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
@@ -220,7 +254,9 @@ export interface FileRoutesById {
   '/_app/integracoes/nuvemshop': typeof AppIntegracoesNuvemshopRoute
   '/api/public/chat': typeof ApiPublicChatRoute
   '/api/public/follow-up-cron': typeof ApiPublicFollowUpCronRoute
+  '/api/public/meta-ads': typeof ApiPublicMetaAdsRoute
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
+  '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -232,6 +268,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/agendamentos'
     | '/agente'
+    | '/anuncios'
     | '/atendimento'
     | '/avaliacoes'
     | '/clientes'
@@ -239,6 +276,7 @@ export interface FileRouteTypes {
     | '/cupons'
     | '/dashboard'
     | '/fluxos'
+    | '/melhorias'
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
@@ -246,7 +284,9 @@ export interface FileRouteTypes {
     | '/integracoes/nuvemshop'
     | '/api/public/chat'
     | '/api/public/follow-up-cron'
+    | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
+    | '/api/public/revisao-ia-cron'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -256,6 +296,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/agendamentos'
     | '/agente'
+    | '/anuncios'
     | '/atendimento'
     | '/avaliacoes'
     | '/clientes'
@@ -263,6 +304,7 @@ export interface FileRouteTypes {
     | '/cupons'
     | '/dashboard'
     | '/fluxos'
+    | '/melhorias'
     | '/pedidos'
     | '/produtos'
     | '/relatorios'
@@ -270,7 +312,9 @@ export interface FileRouteTypes {
     | '/integracoes/nuvemshop'
     | '/api/public/chat'
     | '/api/public/follow-up-cron'
+    | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
+    | '/api/public/revisao-ia-cron'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -281,6 +325,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/agendamentos'
     | '/_app/agente'
+    | '/_app/anuncios'
     | '/_app/atendimento'
     | '/_app/avaliacoes'
     | '/_app/clientes'
@@ -288,6 +333,7 @@ export interface FileRouteTypes {
     | '/_app/cupons'
     | '/_app/dashboard'
     | '/_app/fluxos'
+    | '/_app/melhorias'
     | '/_app/pedidos'
     | '/_app/produtos'
     | '/_app/relatorios'
@@ -295,7 +341,9 @@ export interface FileRouteTypes {
     | '/_app/integracoes/nuvemshop'
     | '/api/public/chat'
     | '/api/public/follow-up-cron'
+    | '/api/public/meta-ads'
     | '/api/public/pos-venda-cron'
+    | '/api/public/revisao-ia-cron'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -307,7 +355,9 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApiPublicChatRoute: typeof ApiPublicChatRoute
   ApiPublicFollowUpCronRoute: typeof ApiPublicFollowUpCronRoute
+  ApiPublicMetaAdsRoute: typeof ApiPublicMetaAdsRoute
   ApiPublicPosVendaCronRoute: typeof ApiPublicPosVendaCronRoute
+  ApiPublicRevisaoIaCronRoute: typeof ApiPublicRevisaoIaCronRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
@@ -355,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/pedidos'
       fullPath: '/pedidos'
       preLoaderRoute: typeof AppPedidosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/melhorias': {
+      id: '/_app/melhorias'
+      path: '/melhorias'
+      fullPath: '/melhorias'
+      preLoaderRoute: typeof AppMelhoriasRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/fluxos': {
@@ -406,6 +463,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAtendimentoRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/anuncios': {
+      id: '/_app/anuncios'
+      path: '/anuncios'
+      fullPath: '/anuncios'
+      preLoaderRoute: typeof AppAnunciosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/agente': {
       id: '/_app/agente'
       path: '/agente'
@@ -427,11 +491,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/revisao-ia-cron': {
+      id: '/api/public/revisao-ia-cron'
+      path: '/api/public/revisao-ia-cron'
+      fullPath: '/api/public/revisao-ia-cron'
+      preLoaderRoute: typeof ApiPublicRevisaoIaCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/pos-venda-cron': {
       id: '/api/public/pos-venda-cron'
       path: '/api/public/pos-venda-cron'
       fullPath: '/api/public/pos-venda-cron'
       preLoaderRoute: typeof ApiPublicPosVendaCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/meta-ads': {
+      id: '/api/public/meta-ads'
+      path: '/api/public/meta-ads'
+      fullPath: '/api/public/meta-ads'
+      preLoaderRoute: typeof ApiPublicMetaAdsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/follow-up-cron': {
@@ -482,6 +560,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAgendamentosRoute: typeof AppAgendamentosRoute
   AppAgenteRoute: typeof AppAgenteRoute
+  AppAnunciosRoute: typeof AppAnunciosRoute
   AppAtendimentoRoute: typeof AppAtendimentoRoute
   AppAvaliacoesRoute: typeof AppAvaliacoesRoute
   AppClientesRoute: typeof AppClientesRoute
@@ -489,6 +568,7 @@ interface AppRouteChildren {
   AppCuponsRoute: typeof AppCuponsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppFluxosRoute: typeof AppFluxosRoute
+  AppMelhoriasRoute: typeof AppMelhoriasRoute
   AppPedidosRoute: typeof AppPedidosRoute
   AppProdutosRoute: typeof AppProdutosRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
@@ -499,6 +579,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAgendamentosRoute: AppAgendamentosRoute,
   AppAgenteRoute: AppAgenteRoute,
+  AppAnunciosRoute: AppAnunciosRoute,
   AppAtendimentoRoute: AppAtendimentoRoute,
   AppAvaliacoesRoute: AppAvaliacoesRoute,
   AppClientesRoute: AppClientesRoute,
@@ -506,6 +587,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppCuponsRoute: AppCuponsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppFluxosRoute: AppFluxosRoute,
+  AppMelhoriasRoute: AppMelhoriasRoute,
   AppPedidosRoute: AppPedidosRoute,
   AppProdutosRoute: AppProdutosRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
@@ -521,7 +603,9 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApiPublicChatRoute: ApiPublicChatRoute,
   ApiPublicFollowUpCronRoute: ApiPublicFollowUpCronRoute,
+  ApiPublicMetaAdsRoute: ApiPublicMetaAdsRoute,
   ApiPublicPosVendaCronRoute: ApiPublicPosVendaCronRoute,
+  ApiPublicRevisaoIaCronRoute: ApiPublicRevisaoIaCronRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicHooksSyncNuvemshopProductsRoute:
     ApiPublicHooksSyncNuvemshopProductsRoute,

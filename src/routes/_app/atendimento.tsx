@@ -157,6 +157,25 @@ function AtendimentoHumano() {
                       </Button>
                     </a>
                   )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                    onClick={() => {
+                      const desc = window.prompt("Descreva o problema com esta conversa:");
+                      if (desc?.trim()) {
+                        supabase.from("feedback_ia").insert({
+                          conversa_id: c.id,
+                          tipo: "manual",
+                          severidade: "media",
+                          descricao: desc.trim(),
+                          status: "pendente",
+                        }).then(() => alert("Erro reportado! Veja em Melhorias IA."));
+                      }
+                    }}
+                  >
+                    ⚑ Reportar erro
+                  </Button>
                 </div>
               </Card>
             );
