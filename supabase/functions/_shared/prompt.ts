@@ -554,45 +554,41 @@ export function dentroDoHorario(cfgAg: any, agora = new Date()): boolean {
   }
 }
 
-// ============ Mídia (áudio / imagem) via Lovable AI Gateway ============
+// ============ Mídia (áudio via Groq Whisper / imagem via Anthropic) ============
 
-const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
-async function fetchAsBase64(url: string): Promise<{ data: string; mime: string }> {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`mídia ${r.status}`);
-  const mime = r.headers.get("content-type") ?? "application/octet-stream";
-  const buf = new Uint8Array(await r.arrayBuffer());
-  let bin = "";
-  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-  return { data: btoa(bin), mime };
-}
-
-export async function transcreverAudio(url: string, apiKey: string): Promise<string | null> {
+export async function transcreverAudio(url: string, _apiKey: string): Promise<string | null> {
   try {
-    const { data, mime } = await fetchAsBase64(url);
-    const r = await fetch(AI_URL, {
+    const groqKey = (Deno.env.get("GROQ_API_KEY") ?? "").replace(/^﻿/, "").trim();
+    if (!groqKey) { console.error("GROQ_API_KEY não configurada"); return null; }
+
+    // Baixa o áudio do WhatsApp
+    const audioResp = await fetch(url);
+    if (!audioResp.ok) throw new Error(`download áudio ${audioResp.status}`);
+    const audioBlob = await audioResp.blob();
+
+    // Envia para Groq Whisper via multipart
+    const form = new FormData();
+    form.append("file", new File([audioBlob], "audio.ogg", { type: "audio/ogg" }));
+    form.append("model", "whisper-large-v3-turbo");
+    form.append("language", "pt");
+    form.append("response_format", "text");
+
+    const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: "Transcreva exatamente o que foi falado neste áudio, em pt-BR. Apenas a transcrição, sem comentários." },
-            { type: "input_audio", input_audio: { data, format: mime.includes("ogg") ? "ogg" : mime.includes("mp3") ? "mp3" : "wav" } },
-          ],
-        }],
-      }),
+      headers: { Authorization: `Bearer ${groqKey}` },
+      body: form,
     });
-    if (!r.ok) { console.error("transcricao err", r.status, await r.text()); return null; }
-    const j = await r.json();
-    return (j.choices?.[0]?.message?.content ?? "").trim() || null;
+
+    if (!r.ok) { console.error("groq whisper err", r.status, await r.text()); return null; }
+    const texto = (await r.text()).trim();
+    return texto || null;
   } catch (e) {
     console.error("transcreverAudio fail", e);
     return null;
   }
 }
+
+const AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 export async function descreverImagem(url: string, apiKey: string): Promise<string | null> {
   try {
