@@ -220,7 +220,7 @@ UMA mensagem CURTA (1-2 frases máx). Não soe automática.`);
 Horário: ${horInicio} às ${horFim}.
 Pagamento: PIX, cartão de crédito, link de pagamento. NUNCA mencione boleto — não aceitamos.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Entrega: para todo o Brasil. Frete GRÁTIS em compras acima de R$ 200. ${freteModo === "nuvemshop" ? "Para saber o valor exato do frete, peça o CEP — NUNCA invente valores." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete grátis." : `R$ ${cfg.taxa_entrega}.`}
+Entrega: para todo o Brasil. Frete GRÁTIS em todos os pedidos. ${freteModo === "nuvemshop" ? "Para confirmar o prazo, peça o CEP — NUNCA invente valores de frete." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete grátis." : `R$ ${cfg.taxa_entrega}.`}
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);

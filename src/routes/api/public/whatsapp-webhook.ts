@@ -99,7 +99,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       console.log("[lid-fix] LID detectado:", remoteJidRaw, "→ número real:", remoteJidReal);
     }
 
-    const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
+    const pushNameRaw: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
+    // Validar pushName: ignorar se for muito longo (> 60 chars) ou parecer mensagem (tem pontuação excessiva)
+    const pushName: string | undefined = (pushNameRaw && pushNameRaw.length <= 60 && !/[!?]{2,}/.test(pushNameRaw) && pushNameRaw.split(" ").length <= 6)
+      ? pushNameRaw.trim() : undefined;
 
     // Extrair e limpar texto
     let text: string | undefined =
@@ -181,7 +184,17 @@ async function handleWebhook(request: Request): Promise<Response> {
         console.warn("[audio] falha na transcrição — audioUrl:", audioUrl, "base64:", !!audioBase64);
         if (remoteJid) {
           const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
-          await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);
+          // Evitar enviar MSG_AUDIO_FAIL múltiplas vezes para a mesma conversa em 5min
+          const cincoMinAtras = new Date(Date.now() - 300_000).toISOString();
+          const { data: convExiste } = await supabaseAdmin.from("conversas").select("id").eq("sessao_token", `wa:${numAudio}`).maybeSingle();
+          const { data: audioFailRecente } = convExiste ? await supabaseAdmin.from("mensagens")
+            .select("id").eq("conversa_id", convExiste.id).eq("papel", "assistant")
+            .ilike("conteudo", "%áudio%").gte("criado_em", cincoMinAtras).limit(1).maybeSingle() : { data: null };
+          if (!audioFailRecente) {
+            await enviarTexto(numAudio, MSG_AUDIO_FAIL, stevoKey);
+          } else {
+            console.log("[audio] MSG_AUDIO_FAIL suprimida — já enviada nos últimos 5min");
+          }
         }
         // Registrar falha de áudio para auditoria
         if (conversa?.id) {
