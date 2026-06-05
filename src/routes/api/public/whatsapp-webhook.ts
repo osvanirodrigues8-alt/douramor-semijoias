@@ -203,12 +203,14 @@ async function handleWebhook(request: Request): Promise<Response> {
         console.log("[audio-transcrito]", tr.slice(0, 80));
       } else {
         console.warn("[audio] falha na transcrição — audioUrl:", audioUrl, "base64:", !!audioBase64);
+        let convExiste: { id: string } | null = null;
         if (remoteJid) {
           const numAudio = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
           const sessaoAudio = `wa:${numAudio}`;
           // Evitar enviar MSG_AUDIO_FAIL múltiplas vezes — busca no banco E salva antes de enviar
           const cincoMinAtras = new Date(Date.now() - 300_000).toISOString();
-          const { data: convExiste } = await supabaseAdmin.from("conversas").select("id").eq("sessao_token", sessaoAudio).maybeSingle();
+          const { data: conv } = await supabaseAdmin.from("conversas").select("id").eq("sessao_token", sessaoAudio).maybeSingle();
+          convExiste = conv;
           const { data: audioFailRecente } = convExiste ? await supabaseAdmin.from("mensagens")
             .select("id").eq("conversa_id", convExiste.id).eq("papel", "assistant")
             .eq("conteudo", MSG_AUDIO_FAIL).gte("criado_em", cincoMinAtras).limit(1).maybeSingle() : { data: null };
@@ -379,8 +381,15 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
 
     // Agora inserir a mensagem do usuário (com stevo_message_id para idempotência em retries futuros)
-    const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao, ...(messageId ? { stevo_message_id: messageId } : {}) });
-    if (errMsgUser) console.error("[mensagens insert user]", errMsgUser);
+    const baseMsgUser = { conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao };
+    const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ ...baseMsgUser, ...(messageId ? { stevo_message_id: messageId } : {}) } as any);
+    if (errMsgUser) {
+      // Resiliência: se a coluna stevo_message_id ainda não existir no banco, salvar sem ela
+      // (garante que a mensagem do usuário NUNCA seja perdida, mesmo antes da migration rodar)
+      console.error("[mensagens insert user]", errMsgUser);
+      const { error: errRetry } = await supabaseAdmin.from("mensagens").insert(baseMsgUser as any);
+      if (errRetry) console.error("[mensagens insert user retry]", errRetry);
+    }
 
     if (cliente?.id) await supabaseAdmin.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);
     await supabaseAdmin.from("conversas").update({ fups_enviados_hoje: 0, dia_followup_atual: 0, proximo_followup_em: null, data_inicio_followup: null }).eq("id", conversa.id);
