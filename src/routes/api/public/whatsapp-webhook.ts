@@ -291,7 +291,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     // IDEMPOTÊNCIA: verificar se o messageId já foi processado antes de iniciar qualquer lógica
     const messageId: string | undefined = key?.id;
     if (messageId) {
-      const { data: msgExistente } = await supabaseAdmin.from("mensagens")
+      const { data: msgExistente } = await (supabaseAdmin.from("mensagens") as any)
         .select("id").eq("stevo_message_id", messageId).limit(1).maybeSingle();
       if (msgExistente) {
         console.log("[idempotencia] messageId já processado:", messageId);
@@ -463,7 +463,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     for (const p of pedidosRecentes ?? []) for (const id of (p.produtos_ids ?? []) as string[]) contagemVendas.set(id, (contagemVendas.get(id) ?? 0) + 1);
 
     const destaqueIds = new Set<string>((cfgAg?.produtos_destaque_ids ?? []) as string[]);
-    const jaMostrados: string[] = Array.isArray(conversa.produtos_mostrados) ? conversa.produtos_mostrados : [];
+    const jaMostrados: string[] = Array.isArray(conversa.produtos_mostrados) ? (conversa.produtos_mostrados as string[]) : [];
 
     // Detectar categoria específica pedida (para priorizar e informar a IA)
     const categoriaMap: Record<string, string> = {
@@ -489,24 +489,24 @@ async function handleWebhook(request: Request): Promise<Response> {
     if (keywords.length) {
       // 1. Busca prioritária: por categoria exata (quando detectada)
       if (categoriaPrincipal) {
-        let qyCat = supabaseAdmin.from("produtos").select(selectProdutos)
+        let qyCat = (supabaseAdmin.from("produtos") as any).select(selectProdutos)
           .eq("status", "disponivel")
           .eq("categoria", categoriaPrincipal)
           .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
           .limit(40);
-        if (generoFiltro) qyCat = (qyCat as any).in("genero", [generoFiltro, "unissex"]);
-        if (precoMax) qyCat = (qyCat as any).lte("preco", precoMax);
+        if (generoFiltro) qyCat = qyCat.in("genero", [generoFiltro, "unissex"]);
+        if (precoMax) qyCat = qyCat.lte("preco", precoMax);
         const { data: catMatch } = await qyCat;
         produtos = catMatch ?? [];
 
         // Fallback: se poucos resultados com filtro de gênero, busca sem filtro
         if (produtos.length < 5 && generoFiltro) {
-          let qyCatSemGenero = supabaseAdmin.from("produtos").select(selectProdutos)
+          let qyCatSemGenero = (supabaseAdmin.from("produtos") as any).select(selectProdutos)
             .eq("status", "disponivel")
             .eq("categoria", categoriaPrincipal)
             .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
             .limit(40);
-          if (precoMax) qyCatSemGenero = (qyCatSemGenero as any).lte("preco", precoMax);
+          if (precoMax) qyCatSemGenero = qyCatSemGenero.lte("preco", precoMax);
           const { data: semGenero } = await qyCatSemGenero;
           if ((semGenero?.length ?? 0) > produtos.length) produtos = semGenero ?? [];
         }
