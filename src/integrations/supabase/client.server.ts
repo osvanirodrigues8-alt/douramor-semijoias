@@ -5,6 +5,19 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+// @supabase/realtime-js 2.x verifica globalThis.WebSocket na inicialização.
+// Node.js 20 não tem WebSocket nativo (adicionado no Node 22) — polyfill mínimo
+// para evitar "Node.js 20 detected without native WebSocket support".
+if (typeof globalThis.WebSocket === 'undefined') {
+  (globalThis as any).WebSocket = class MockWebSocket {
+    static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+    readyState = 3;
+    constructor() {}
+    close() {} send() {}
+    addEventListener() {} removeEventListener() {} dispatchEvent() { return false; }
+  };
+}
+
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
