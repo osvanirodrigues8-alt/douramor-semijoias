@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
     const fromMe = key?.fromMe === true || info?.IsFromMe === true;
     const remoteJid: string | undefined = key?.remoteJid ?? data?.remoteJid ?? info?.Chat ?? info?.Sender;
     const pushName: string | undefined = data?.pushName ?? data?.notifyName ?? info?.PushName;
+    const stevoMessageId: string | undefined = key?.id ?? data?.messageId ?? data?.id;
     let text: string | undefined =
       message?.conversation ?? message?.extendedTextMessage?.text ?? message?.text ?? data?.text ?? payload?.message;
 
@@ -114,6 +115,19 @@ Deno.serve(async (req) => {
     }
     const numero = remoteJid.replace(/@.*/, "").replace(/\D/g, "");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // === Idempotência: rejeita mensagens já processadas (Stevo pode reenviar em retries) ===
+    if (stevoMessageId && !fromMe) {
+      const { data: jaProcessada } = await supabase
+        .from("mensagens")
+        .select("id")
+        .eq("stevo_message_id", stevoMessageId)
+        .maybeSingle();
+      if (jaProcessada) {
+        console.log("[webhook] mensagem duplicada ignorada:", stevoMessageId);
+        return new Response(JSON.stringify({ ok: true, ignored: "mensagem duplicada" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+    }
 
     // ===== Mensagem enviada pelo HUMANO (fromMe) → registra como assistant para a Juliana ler depois =====
     if (fromMe) {
@@ -191,10 +205,18 @@ Deno.serve(async (req) => {
       conversa = nova!;
     }
 
-    await supabase.from("mensagens").insert({
+    const { error: msgInsertErr } = await supabase.from("mensagens").insert({
       conversa_id: conversa.id, papel: "user", conteudo: text,
       midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao,
+      stevo_message_id: stevoMessageId ?? null,
     });
+    // Fallback: se coluna stevo_message_id ainda não existe no banco, insere sem ela
+    if (msgInsertErr) {
+      await supabase.from("mensagens").insert({
+        conversa_id: conversa.id, papel: "user", conteudo: text,
+        midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao,
+      });
+    }
 
     // Cliente respondeu → reset cadência follow-up + atualiza data_ultimo_contato
     await supabase.from("clientes").update({ data_ultimo_contato: new Date().toISOString() }).eq("id", cliente.id);

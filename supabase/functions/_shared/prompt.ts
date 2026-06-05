@@ -389,7 +389,7 @@ Existe um cupom (${cupomCodigo}, ${cupomPct}%) reservado para casos de objeção
 - Cliente pede EXPLICITAMENTE ("quero falar com humano/atendente/responsável/gerente")
 - Reclamação real, insatisfação clara, problema com pedido já feito
 - Pergunta técnica complexa que você realmente não sabe responder com o catálogo/FAQ
-- Você tentou ${cfgAg?.tentativas_antes_escalar ?? 2}x mostrar produto e não achou nada adequado
+- Você tentou ${cfgAg?.tentativas_antes_escalar ?? 10}x mostrar produto e não achou nada adequado
 ${quandoTransferir ? `- Casos adicionais: ${quandoTransferir}` : ""}
 
 Quando decidir escalar, responda APENAS com algo natural tipo:
