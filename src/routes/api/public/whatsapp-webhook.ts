@@ -782,8 +782,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     ]);
 
     // Delay humanizador antes de enviar (simula tempo de digitação)
-    // Entre 30s e 50s aleatório para não parecer robô
-    const delayMs = 30000 + Math.floor(Math.random() * 20000);
+    const delayMs = 10000;
     await new Promise((r) => setTimeout(r, delayMs));
 
     // Enviar blocos com delay entre mensagens e verificação de falha
