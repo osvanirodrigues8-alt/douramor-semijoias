@@ -131,7 +131,7 @@ async function handleChat(request: Request): Promise<Response> {
     const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: userMessages }),
+      body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-sonnet-4-6", max_tokens: 1024, system: systemPrompt, messages: userMessages }),
     });
 
     if (!aiResp.ok) {
