@@ -704,13 +704,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ ok: true, ia_vazia: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    let marcarHumano = false;
-    let motivoEscalar: string | null = null;
-    if (/\[ESCALAR\]/i.test(reply)) {
-      marcarHumano = true;
-      motivoEscalar = "Juliana decidiu escalar";
-      reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
-    }
+    // [ESCALAR] e [ESCALAR_ATACADO]: apenas remove a tag do texto — não pausa a IA nem seta precisa_humano
+    // A Juliana resolve tudo sozinha; transferência para humano só acontece via ação manual no painel
+    reply = reply.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
+    const marcarHumano = false;
 
     const novosMostrados = new Set(jaMostrados);
     const novosVistosIds = new Set<string>((cliente.produtos_vistos ?? []) as string[]);
@@ -719,14 +716,8 @@ async function handleWebhook(request: Request): Promise<Response> {
       const hit = (p.nome && replyLower.includes(String(p.nome).toLowerCase())) || (p.url_produto && reply.includes(p.url_produto));
       if (hit) { novosMostrados.add(p.nome); novosVistosIds.add(p.id); }
     }
-    const adicionouAlgum = novosMostrados.size > jaMostrados.length;
-    // Resetar tentativas quando produtos foram encontrados no banco (mesmo se já mostrados)
+    // Contador de tentativas sem produto — apenas para rastreio, sem escalar automaticamente
     const novaTentativaSemResultado = (buscaProdutoSolicitada && produtos.length > 0) ? 0 : buscaProdutoSolicitada ? (conversa.tentativas_sem_resultado ?? 0) + 1 : conversa.tentativas_sem_resultado ?? 0;
-    if (buscaProdutoSolicitada && !adicionouAlgum && novaTentativaSemResultado >= tentativasMax) {
-      marcarHumano = true;
-      motivoEscalar = motivoEscalar ?? "Juliana não encontrou produto adequado";
-      reply = MSG_HUMANO;
-    }
 
     const novosInteresseIds = new Set<string>((cliente.produtos_interesse ?? []) as string[]);
     if (intencaoCompra) for (const id of novosVistosIds) novosInteresseIds.add(id);
@@ -756,7 +747,6 @@ async function handleWebhook(request: Request): Promise<Response> {
       supabaseAdmin.from("conversas").update({
         produtos_mostrados: Array.from(novosMostrados),
         tentativas_sem_resultado: novaTentativaSemResultado,
-        ...(marcarHumano ? { precisa_humano: true, motivo_humano: motivoEscalar, humano_em: new Date().toISOString() } : {}),
       }).eq("id", conversa.id).then(({ error }) => { if (error) console.error("[conversas update]", error); }),
       supabaseAdmin.from("clientes").update({
         produtos_vistos: Array.from(novosVistosIds),
