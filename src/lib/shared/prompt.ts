@@ -54,7 +54,12 @@ export function buildSystemPrompt(opts: {
   const contextoLoja = freteModoCfg === "nuvemshop"
     ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
     : contextoLojaRaw;
-  const diferenciais = cfg?.diferenciais_loja ?? "";
+  // Remove menções a "frete grátis acima de R$X" dos diferenciais quando modo é nuvemshop
+  // (o frete real é calculado pelo CEP; esse texto contradiz as instruções de frete)
+  const diferenciaisRaw = cfg?.diferenciais_loja ?? "";
+  const diferenciais = freteModoCfg === "nuvemshop"
+    ? String(diferenciaisRaw).replace(/frete\s+gr[aá]tis[^,.\n]*/gi, "frete calculado pelo CEP")
+    : diferenciaisRaw;
   const personalidade = cfg?.personalidade ?? "";
   const promptExtra = cfgAg?.prompt_extra ?? "";
   const maxProd = cfgAg?.max_produtos_apresentacao ?? 3;
@@ -225,7 +230,7 @@ NÃO faça pergunta de diagnóstico (ex: "é pra você ou presente?"). Se precis
 Horário: ${horInicio} às ${horFim}.
 Pagamento: PIX, cartão de crédito, link de pagamento. NUNCA mencione boleto — não aceitamos.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
-Entrega: para todo o Brasil. Frete GRÁTIS em todos os pedidos. ${freteModo === "nuvemshop" ? "Para confirmar o prazo, peça o CEP — NUNCA invente valores de frete." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete grátis." : `R$ ${cfg.taxa_entrega}.`}
+Entrega: para todo o Brasil com rastreio. ${freteModo === "nuvemshop" ? "O valor do frete é calculado pelo CEP do cliente — varia por localidade e produto. NUNCA diga que é grátis sem ter o CEP calculado." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete GRÁTIS em todos os pedidos." : `Frete fixo R$ ${cfg.taxa_entrega}.`}
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
@@ -375,7 +380,7 @@ Quando o cliente disser "tá caro", "não tenho dinheiro", "vi mais barato":
 # CONCORRENTE — script obrigatório
 Quando o cliente citar outra loja ou dizer que viu mais barato em outro lugar:
 - NUNCA cite o concorrente pelo nome, nem para comparar favoravelmente.
-- Responda: "Cada loja tem seu processo — o que garanto é que aqui você tem banhado a ouro 18k com garantia de 1 ano e frete grátis. Quer que eu te mostre o produto com mais detalhes?"
+- Responda: "Cada loja tem seu processo — o que garanto é que aqui você tem banhado a ouro 18k com garantia de 1 ano. Quer que eu te mostre o produto com mais detalhes?"
 - Foque nos diferenciais reais: garantia, qualidade do banho, frete grátis, atendimento.`);
 
   return blocos.filter(Boolean).join("\n\n");
