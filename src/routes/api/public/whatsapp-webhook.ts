@@ -707,9 +707,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     } catch (e: any) {
       if (e.name === "AbortError") {
         console.error("[webhook] Anthropic timeout");
-        await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
-        await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Timeout da IA", humano_em: new Date().toISOString() }).eq("id", conversa.id);
-        await enviarTexto(numero, MSG_HUMANO, stevoKey);
+        const msgTimeout = "Deixa eu ver isso com mais calma e te respondo em instantes 💛";
+        await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgTimeout });
+        await enviarTexto(numero, msgTimeout, stevoKey);
         return new Response(JSON.stringify({ ok: true, timeout: true }), { headers: { ...cors, "Content-Type": "application/json" } });
       }
       throw e;
@@ -721,12 +721,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     const ai = await aiResp.json();
     let reply: string = (ai.content?.[0]?.text ?? "").trim();
 
-    // IA retornou vazio — escalar para humano
+    // IA retornou vazio — tenta resposta genérica sem congelar a conversa
     if (!reply) {
-      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
-      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "IA retornou resposta vazia", humano_em: new Date().toISOString() }).eq("id", conversa.id);
-      await enviarTexto(numero, MSG_HUMANO, stevoKey);
-      return new Response(JSON.stringify({ ok: true, ia_vazia: true }), { headers: { ...cors, "Content-Type": "application/json" } });
+      reply = "Oi! Tudo bem? Como posso te ajudar hoje? 💛";
     }
 
     // [ESCALAR] e [ESCALAR_ATACADO]: apenas remove a tag do texto — não pausa a IA nem seta precisa_humano
