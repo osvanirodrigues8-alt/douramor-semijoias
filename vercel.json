@@ -1,6 +1,7 @@
 {
   "buildCommand": "npm run build:vercel",
   "crons": [
+    { "path": "/api/public/hooks/sync-nuvemshop-products", "schedule": "0 */6 * * *" },
     { "path": "/api/public/follow-up-cron", "schedule": "0 * * * *" },
     { "path": "/api/public/pos-venda-cron", "schedule": "30 * * * *" },
     { "path": "/api/public/revisao-ia-cron", "schedule": "45 * * * *" }
