@@ -66,9 +66,11 @@ function inferirGenero(nome: string, categoriasNS: string[], categoria: Categori
   if (/(feminin|menina)/.test(n)) return "feminino";
   // Itens tipicamente masculinos por categoria
   if (categoria === "escapulario" || categoria === "bracelete") return "masculino";
-  // Óculos como unissex
-  if (categoria === "oculos") return "unissex";
+  // Relógios e óculos são unissex por padrão — aparecem para qualquer gênero
+  if (categoria === "relogio" || categoria === "oculos") return "unissex";
   if (/\b(unissex|infantil)\b/.test(n)) return "unissex";
+  // Conjuntos/kits: unissex se o nome não indicar gênero
+  if (categoria === "conjunto") return "unissex";
   return "feminino";
 }
 

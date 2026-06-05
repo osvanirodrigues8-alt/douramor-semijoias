@@ -498,6 +498,18 @@ async function handleWebhook(request: Request): Promise<Response> {
         if (precoMax) qyCat = (qyCat as any).lte("preco", precoMax);
         const { data: catMatch } = await qyCat;
         produtos = catMatch ?? [];
+
+        // Fallback: se poucos resultados com filtro de gênero, busca sem filtro
+        if (produtos.length < 5 && generoFiltro) {
+          let qyCatSemGenero = supabaseAdmin.from("produtos").select(selectProdutos)
+            .eq("status", "disponivel")
+            .eq("categoria", categoriaPrincipal)
+            .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
+            .limit(40);
+          if (precoMax) qyCatSemGenero = (qyCatSemGenero as any).lte("preco", precoMax);
+          const { data: semGenero } = await qyCatSemGenero;
+          if ((semGenero?.length ?? 0) > produtos.length) produtos = semGenero ?? [];
+        }
       }
 
       // 2. Se ainda tem espaço, complementa com busca por nome/descrição
@@ -513,6 +525,19 @@ async function handleWebhook(request: Request): Promise<Response> {
         const { data: matched } = await qy;
         const seen = new Set(produtos.map((p) => p.id));
         for (const p of matched ?? []) if (!seen.has(p.id)) produtos.push(p);
+
+        // Fallback: se ainda poucos resultados com filtro de gênero, busca sem filtro
+        if (produtos.length < 5 && generoFiltro) {
+          let qySemGenero = supabaseAdmin.from("produtos").select(selectProdutos)
+            .eq("status", "disponivel")
+            .or(orFilter)
+            .not("categoria", "in", `(${categoriasExcluidas.join(",")})`)
+            .limit(30);
+          if (precoMax) qySemGenero = (qySemGenero as any).lte("preco", precoMax);
+          const { data: matchedSemGenero } = await qySemGenero;
+          const seenFallback = new Set(produtos.map((p) => p.id));
+          for (const p of matchedSemGenero ?? []) if (!seenFallback.has(p.id)) produtos.push(p);
+        }
       }
     }
 
