@@ -701,7 +701,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       aiResp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-sonnet-4-6", max_tokens: 1024, system: systemPrompt, messages: messagesParaIA }),
+        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: messagesParaIA }),
         signal: ac.signal,
       });
     } catch (e: any) {
