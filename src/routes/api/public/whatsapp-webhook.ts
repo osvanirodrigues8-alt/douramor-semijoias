@@ -717,7 +717,11 @@ async function handleWebhook(request: Request): Promise<Response> {
       clearTimeout(aiTimer);
     }
 
-    if (!aiResp.ok) throw new Error(`AI ${aiResp.status}`);
+    if (!aiResp.ok) {
+      const errBody = await aiResp.text().catch(() => "");
+      console.error("[webhook] Anthropic error", aiResp.status, errBody);
+      throw new Error(`AI ${aiResp.status}: ${errBody.slice(0, 200)}`);
+    }
     const ai = await aiResp.json();
     let reply: string = (ai.content?.[0]?.text ?? "").trim();
 
