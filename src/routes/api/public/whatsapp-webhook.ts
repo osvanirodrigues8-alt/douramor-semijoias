@@ -5,7 +5,6 @@ import {
   buildSystemPrompt,
   expandirComSinonimos,
   detectarFaixaPreco,
-  detectarPedidoHumano,
   detectarIntencaoCompra,
   detectarTipoConversa,
   detectarTemperatura,
@@ -398,17 +397,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ ok: true, pausada_humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    // Detecção de pedido humano com word boundary nas palavras extras
-    const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
-    const pedidoHumano = detectarPedidoHumano(text, palavrasExtras);
-    if (pedidoHumano.sim) {
-      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString() }).eq("id", conversa.id);
-      const { error: errEsc } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: MSG_HUMANO });
-      if (errEsc) console.error("[mensagens insert escalar]", errEsc);
-      const resp = await enviarTexto(numero, MSG_HUMANO, stevoKey);
-      if (!resp.ok) console.error("[stevo-send escalar]", resp.status);
-      return new Response(JSON.stringify({ ok: true, humano: true }), { headers: { ...cors, "Content-Type": "application/json" } });
-    }
+    // REGRA DE NEGÓCIO: a Juliana NUNCA passa para humano automaticamente.
+    // Mesmo que o cliente peça "falar com atendente", ela responde sozinha
+    // (o prompt instrui a contornar dizendo que vai verificar com a equipe).
+    // A pausa por humano só acontece via ação manual (owner respondendo no fromMe).
 
     const intencaoCompra = detectarIntencaoCompra(text);
     if (intencaoCompra) await supabaseAdmin.from("conversas").update({ intencao_compra_em: new Date().toISOString() }).eq("id", conversa.id);
@@ -729,9 +721,19 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
 
     if (!aiResp.ok) {
+      // Erro da IA: NÃO retornar 500 (faria o Stevo retentar e duplicar mensagens →
+      // loop cascata que já derrubou o bot uma vez). Envia mensagem de espera e
+      // retorna 200 para encerrar a entrega sem retry.
       const errBody = await aiResp.text().catch(() => "");
-      console.error("[webhook] Anthropic error", aiResp.status, errBody);
-      throw new Error(`AI ${aiResp.status}: ${errBody.slice(0, 200)}`);
+      console.error("[webhook] Anthropic error", aiResp.status, errBody.slice(0, 300));
+      // DIAGNÓSTICO TEMPORÁRIO: para mensagens de teste, expõe a causa real do erro
+      if (numero.startsWith("5531900000") || numero.startsWith("55319111") || numero.startsWith("55319222")) {
+        return new Response(JSON.stringify({ ok: false, ai_error: aiResp.status, modelo: cfg.modelo_ia ?? "(default haiku)", anthropic: errBody.slice(0, 300) }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+      const msgErro = "Deixa eu verificar isso aqui com calma e já te respondo 💛";
+      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgErro });
+      await enviarTexto(numero, msgErro, stevoKey);
+      return new Response(JSON.stringify({ ok: true, ai_error: aiResp.status }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
     const ai = await aiResp.json();
     let reply: string = (ai.content?.[0]?.text ?? "").trim();

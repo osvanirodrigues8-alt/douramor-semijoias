@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { buildSystemPrompt, detectarPedidoHumano } from "@/lib/shared/prompt";
+import { buildSystemPrompt } from "@/lib/shared/prompt";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
 
 const cors = {
@@ -54,16 +54,9 @@ async function handleChat(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ reply: "Um momento! Nossa equipe já está ciente e vai te responder em breve 💛", pausada: true }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    // Detectar pedido de humano antes de chamar IA
-    const palavrasExtras = (cfgAg?.palavras_chave_humano ?? []) as string[];
-    const pedidoHumano = detectarPedidoHumano(message, palavrasExtras);
-    if (pedidoHumano.sim) {
-      const msgEscalar = "Deixa eu verificar esse detalhe aqui com calma pra você — um momento 💛";
-      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
-      await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgEscalar });
-      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: pedidoHumano.motivo, humano_em: new Date().toISOString() }).eq("id", conversa.id);
-      return new Response(JSON.stringify({ reply: msgEscalar, escalado: true }), { headers: { ...cors, "Content-Type": "application/json" } });
-    }
+    // REGRA DE NEGÓCIO: a Juliana NUNCA passa para humano automaticamente.
+    // Mesmo que o cliente peça atendente, ela responde sozinha (o prompt instrui
+    // a contornar). Pausa só via ação manual no painel.
 
     await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "user", conteudo: message });
     const { data: hist } = await supabaseAdmin.from("mensagens").select("papel, conteudo").eq("conversa_id", conversa.id).order("criado_em", { ascending: true }).limit(40);
@@ -143,17 +136,13 @@ async function handleChat(request: Request): Promise<Response> {
     const ai = await aiResp.json();
     let reply: string = (ai.content?.[0]?.text ?? "Desculpe, não consegui responder agora.").trim();
 
-    // Processar tag de escalação
-    let escalado = false;
-    if (/\[ESCALAR\]/i.test(reply)) {
-      escalado = true;
-      reply = reply.replace(/\[ESCALAR\]/gi, "").trim();
-      await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Juliana decidiu escalar", humano_em: new Date().toISOString() }).eq("id", conversa.id);
-    }
+    // [ESCALAR]: apenas remove a tag — Juliana resolve tudo, nunca transfere para humano
+    reply = reply.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
+    if (!reply) reply = "Oi! Tudo bem? Como posso te ajudar hoje? 💛";
 
     await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
 
-    return new Response(JSON.stringify({ reply, conversa_id: conversa.id, escalado }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ reply, conversa_id: conversa.id, escalado: false }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[chat]", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });

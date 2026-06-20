@@ -149,20 +149,9 @@ async function processFollowUps() {
       const replyRaw: string = (ai.content?.[0]?.text ?? "").trim();
       if (!replyRaw) { resultados.push({ conv: conv.id, erro: "AI vazio" }); continue; }
 
-      // Correção: detectar [ESCALAR] antes de remover a tag
-      const precisaEscalar = /\[ESCALAR\]/i.test(replyRaw);
-      const reply = replyRaw.replace(/\[ESCALAR\]/gi, "").trim();
-
-      if (precisaEscalar) {
-        // Correção PROBLEMA 4/req4: Marcar como precisa de humano com motivo e timestamp
-        await supabaseAdmin.from("conversas").update({
-          precisa_humano: true,
-          motivo_humano: "Escalado pelo follow-up automático",
-          humano_em: new Date().toISOString(),
-        }).eq("id", conv.id);
-        resultados.push({ conv: conv.id, ok: true, escalado: true, dia: diaAtual });
-        continue;
-      }
+      // REGRA DE NEGÓCIO: Juliana nunca transfere para humano — apenas remove a tag
+      const reply = replyRaw.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
+      if (!reply) { resultados.push({ conv: conv.id, erro: "AI vazio após limpar tags" }); continue; }
 
       const numero = String(conv.sessao_token).replace(/^wa:/, "").replace(/@.*/, "").replace(/\D/g, "");
 
