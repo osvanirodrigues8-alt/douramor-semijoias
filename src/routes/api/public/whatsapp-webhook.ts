@@ -688,10 +688,21 @@ async function handleWebhook(request: Request): Promise<Response> {
       : historicoMessages;
 
     // Mascarar PII e garantir que o array termina com a msg do usuário atual
-    const messagesParaIA = [
+    const rawMessages = [
       ...histSemDuplicata.map((m: any) => ({ ...m, content: mascararPII(m.content) })),
       { role: "user" as const, content: mascararPII(text) },
     ];
+
+    // Mesclar mensagens consecutivas do mesmo papel (Anthropic rejeita 400 se houver)
+    // Pode ocorrer quando o Stevo retenta e insere msg duplicada no banco
+    const messagesParaIA = rawMessages.reduce((acc: { role: "user" | "assistant"; content: string }[], m) => {
+      if (acc.length > 0 && acc[acc.length - 1].role === m.role) {
+        acc[acc.length - 1].content += "\n" + m.content;
+      } else {
+        acc.push({ role: m.role, content: m.content });
+      }
+      return acc;
+    }, []);
 
     // Chamar Anthropic com timeout de 25s
     const ac = new AbortController();
