@@ -630,7 +630,7 @@ export async function descreverImagem(url: string, apiKey: string): Promise<stri
       method: "POST",
       headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
         messages: [{
           role: "user",
@@ -650,6 +650,58 @@ export async function descreverImagem(url: string, apiKey: string): Promise<stri
     return (j.content?.[0]?.text ?? "").trim() || null;
   } catch (e) {
     console.error("[descreverImagem] fail", e);
+    return null;
+  }
+}
+
+// Limpa o texto antes de virar voz: remove links, emojis e markdown que soariam estranhos falados.
+// Retorna null se, depois de limpar, não sobrar nada falável (ex.: resposta era só um link).
+export function prepararTextoParaVoz(texto: string): string | null {
+  const limpo = texto
+    .replace(/https?:\/\/\S+/g, "")                 // links não se fala em voz
+    .replace(/[*_`~#>]/g, "")                        // marcadores de markdown
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, "") // emojis/símbolos
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+  return limpo.length >= 2 ? limpo : null;
+}
+
+// Gera áudio (nota de voz) a partir de texto via ElevenLabs. Retorna base64 + mime, ou null se falhar.
+// Voz e modelo são configuráveis por env; sem ELEVENLABS_API_KEY a função é um no-op (retorna null).
+export async function gerarAudioElevenLabs(texto: string): Promise<{ base64: string; mime: string } | null> {
+  const apiKey = (process.env.ELEVENLABS_API_KEY ?? "").trim();
+  const voiceId = (process.env.ELEVENLABS_VOICE_ID ?? "").trim();
+  if (!apiKey || !voiceId) {
+    if (!apiKey) console.warn("[gerarAudioElevenLabs] ELEVENLABS_API_KEY não configurada");
+    else console.warn("[gerarAudioElevenLabs] ELEVENLABS_VOICE_ID não configurado");
+    return null;
+  }
+  const falavel = prepararTextoParaVoz(texto);
+  if (!falavel) return null;
+  // Limite de caracteres por segurança de custo (textos muito longos viram texto, não voz)
+  const textoFinal = falavel.slice(0, 800);
+  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5").trim();
+  try {
+    const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({
+        text: textoFinal,
+        model_id: modelId,
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!resp.ok) {
+      console.error("[gerarAudioElevenLabs] erro", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
+      return null;
+    }
+    const buf = await resp.arrayBuffer();
+    if (!buf.byteLength) return null;
+    return { base64: Buffer.from(buf).toString("base64"), mime: "audio/mpeg" };
+  } catch (e) {
+    console.error("[gerarAudioElevenLabs] fail", e);
     return null;
   }
 }

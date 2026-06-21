@@ -12,6 +12,7 @@ import {
   transcreverAudioBase64,
   descreverImagem,
   extrairKeywordsDeDescricao,
+  gerarAudioElevenLabs,
 } from "@/lib/shared/prompt";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
@@ -54,6 +55,18 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
     headers: { "Content-Type": "application/json", apikey: stevoKey },
     body: JSON.stringify({ number: numero, text }),
     signal: AbortSignal.timeout(8000),
+  }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
+}
+
+// Envia nota de voz nativa. Stevo é baseado na Evolution API → endpoint /send/audio com base64.
+// O contrato exato (campo audio base64 vs url) deve ser confirmado em teste ao vivo; o chamador
+// faz fallback para texto se isto falhar, então um endpoint errado nunca deixa o cliente sem resposta.
+async function enviarAudio(numero: string, base64: string, stevoKey: string) {
+  return fetch("https://smv2-4.stevo.chat/send/audio", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: stevoKey },
+    body: JSON.stringify({ number: numero, audio: base64 }),
+    signal: AbortSignal.timeout(15000),
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
@@ -726,10 +739,6 @@ async function handleWebhook(request: Request): Promise<Response> {
       // retorna 200 para encerrar a entrega sem retry.
       const errBody = await aiResp.text().catch(() => "");
       console.error("[webhook] Anthropic error", aiResp.status, errBody.slice(0, 300));
-      // DIAGNÓSTICO TEMPORÁRIO: para mensagens de teste, expõe a causa real do erro
-      if (numero.startsWith("5531900000") || numero.startsWith("55319111") || numero.startsWith("55319222")) {
-        return new Response(JSON.stringify({ ok: false, ai_error: aiResp.status, modelo: cfg.modelo_ia ?? "(default haiku)", anthropic: errBody.slice(0, 300) }), { headers: { ...cors, "Content-Type": "application/json" } });
-      }
       const msgErro = "Deixa eu verificar isso aqui com calma e já te respondo 💛";
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: msgErro });
       await enviarTexto(numero, msgErro, stevoKey);
@@ -799,8 +808,23 @@ async function handleWebhook(request: Request): Promise<Response> {
     const delayMs = 10000;
     await new Promise((r) => setTimeout(r, delayMs));
 
-    // Enviar blocos com delay entre mensagens e verificação de falha
-    const blocosEnvio = separarMensagens(reply);
+    // ÁUDIO (modo espelho): se o cliente mandou áudio e a resposta não tem link,
+    // a Juliana responde por nota de voz. Link/preço continuam em texto.
+    // Qualquer falha (TTS ou envio) cai para texto — o cliente nunca fica sem resposta.
+    const clienteMandouAudio = midiaTipo === "audio";
+    const replyTemLink = /https?:\/\/\S+/.test(reply);
+    let audioEnviado = false;
+    if (clienteMandouAudio && !replyTemLink) {
+      const voz = await gerarAudioElevenLabs(reply);
+      if (voz) {
+        const respAudio = await enviarAudio(numero, voz.base64, stevoKey);
+        if (respAudio.ok) { audioEnviado = true; console.log("[stevo-audio] enviado"); }
+        else console.error("[stevo-audio] falha", respAudio.status, "— caindo para texto");
+      }
+    }
+
+    // Enviar blocos com delay entre mensagens e verificação de falha (pulado quando já foi por voz)
+    const blocosEnvio = audioEnviado ? [] : separarMensagens(reply);
     for (let i = 0; i < blocosEnvio.length; i++) {
       if (i > 0) await new Promise((r) => setTimeout(r, 800));
       const resp = await enviarTexto(numero, blocosEnvio[i], stevoKey);
@@ -827,7 +851,7 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
     if (produtosMencionados.length) await supabaseAdmin.from("conversas").update({ fotos_enviadas: Array.from(enviadasSet) }).eq("id", conversa.id);
 
-    return new Response(JSON.stringify({ ok: true, blocos: blocosEnvio.length, fotos: produtosMencionados.length, humano: marcarHumano }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ ok: true, blocos: blocosEnvio.length, audio: audioEnviado, fotos: produtosMencionados.length, humano: marcarHumano }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("[whatsapp-webhook] error", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });

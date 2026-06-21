@@ -140,7 +140,7 @@ async function processAuditoriaManual(params: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",  // Sonnet para análise mais profunda
+          model: "claude-haiku-4-5-20251001",  // Haiku — sonnet retorna 400 nesta conta
           max_tokens: 1500,
           messages: [{ role: "user", content: prompt }],
         }),
