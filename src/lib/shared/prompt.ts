@@ -706,6 +706,10 @@ export async function gerarAudioElevenLabs(texto: string): Promise<{ base64: str
   }
 }
 
+// Voz premade que funciona no plano GRÁTIS do ElevenLabs.
+// (Vozes da biblioteca/compartilhadas exigem plano pago via API — retornam 402.)
+const VOZ_PREMADE_FALLBACK = "EXAVITQu4vr4xnSDxMaL"; // "Sarah" — feminina, suave
+
 // Igual a gerarAudioElevenLabs, mas retorna os bytes (Buffer) — usado pelo endpoint /api/public/voz
 // que serve o áudio diretamente para o Stevo buscar.
 export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer: Buffer; mime: string } | null> {
@@ -716,17 +720,25 @@ export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer
   if (!falavel) return null;
   const textoFinal = falavel.slice(0, 800);
   const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5").trim();
+
+  const pedir = (vid: string) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+    body: JSON.stringify({
+      text: textoFinal,
+      model_id: modelId,
+      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true },
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
   try {
-    const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-      method: "POST",
-      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-      body: JSON.stringify({
-        text: textoFinal,
-        model_id: modelId,
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true },
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
+    let resp = await pedir(voiceId);
+    // Plano grátis não usa voz da biblioteca via API (402) → cai para uma voz premade que funciona.
+    if (resp.status === 402 && voiceId !== VOZ_PREMADE_FALLBACK) {
+      console.warn("[tts] voz configurada exige plano pago (402); usando voz premade fallback");
+      resp = await pedir(VOZ_PREMADE_FALLBACK);
+    }
     if (!resp.ok) {
       console.error("[gerarAudioElevenLabsBytes] erro", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
       return null;
