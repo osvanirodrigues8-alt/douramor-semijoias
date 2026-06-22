@@ -719,7 +719,8 @@ export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer
   const falavel = prepararTextoParaVoz(texto);
   if (!falavel) return null;
   const textoFinal = falavel.slice(0, 800);
-  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5").trim();
+  // multilingual_v2 = voz mais natural/expressiva p/ pt-BR (turbo é mais rápido porém "chapado").
+  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_multilingual_v2").trim();
 
   const pedir = (vid: string) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
     method: "POST",
