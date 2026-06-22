@@ -12,8 +12,8 @@ import {
   transcreverAudioBase64,
   descreverImagem,
   extrairKeywordsDeDescricao,
-  gerarAudioElevenLabs,
 } from "@/lib/shared/prompt";
+import crypto from "node:crypto";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
 import { detectarProblemasConversa, registrarFeedback } from "@/lib/shared/auditoria";
@@ -58,14 +58,14 @@ async function enviarTexto(numero: string, text: string, stevoKey: string) {
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
 
-// Envia nota de voz nativa. Stevo é baseado na Evolution API → endpoint /send/audio com base64.
-// O contrato exato (campo audio base64 vs url) deve ser confirmado em teste ao vivo; o chamador
-// faz fallback para texto se isto falhar, então um endpoint errado nunca deixa o cliente sem resposta.
-async function enviarAudio(numero: string, base64: string, stevoKey: string) {
-  return fetch("https://smv2-4.stevo.chat/send/audio", {
+// Envia áudio pelo /send/media (o Stevo NÃO tem /send/audio e só aceita URL, não base64).
+// A URL aponta para /api/public/voz, que gera o áudio (ElevenLabs) quando o Stevo a busca.
+// O chamador faz fallback para texto se isto falhar — o cliente nunca fica sem resposta.
+async function enviarAudioMedia(numero: string, url: string, stevoKey: string) {
+  return fetch("https://smv2-4.stevo.chat/send/media", {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: stevoKey },
-    body: JSON.stringify({ number: numero, audio: base64 }),
+    body: JSON.stringify({ number: numero, type: "audio", url, filename: "audio.mp3" }),
     signal: AbortSignal.timeout(15000),
   }).catch((e) => ({ ok: false, status: 0, _err: e })) as Promise<any>;
 }
@@ -770,9 +770,10 @@ async function handleWebhook(request: Request): Promise<Response> {
     const novosInteresseIds = new Set<string>((cliente.produtos_interesse ?? []) as string[]);
     if (intencaoCompra) for (const id of novosVistosIds) novosInteresseIds.add(id);
 
-    // Inserir mensagem assistente separado dos updates de metadados
-    const { error: errMsgAss } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply });
+    // Inserir mensagem assistente separado dos updates de metadados (capturando o id p/ áudio)
+    const { data: msgAssRow, error: errMsgAss } = await supabaseAdmin.from("mensagens").insert({ conversa_id: conversa.id, papel: "assistant", conteudo: reply }).select("id").maybeSingle();
     if (errMsgAss) console.error("[mensagens insert assistant]", errMsgAss);
+    const msgAssistId: string | null = (msgAssRow as any)?.id ?? null;
 
     // ─── Auditoria automática (nunca derruba o fluxo principal) ─────────────
     try {
@@ -808,19 +809,20 @@ async function handleWebhook(request: Request): Promise<Response> {
     const delayMs = 10000;
     await new Promise((r) => setTimeout(r, delayMs));
 
-    // ÁUDIO (modo espelho): se o cliente mandou áudio e a resposta não tem link,
-    // a Juliana responde por nota de voz. Link/preço continuam em texto.
-    // Qualquer falha (TTS ou envio) cai para texto — o cliente nunca fica sem resposta.
-    const clienteMandouAudio = midiaTipo === "audio";
+    // ÁUDIO: a Juliana responde por voz nas mensagens conversacionais (sem link, curtas).
+    // Link/preço e respostas longas continuam em texto. O Stevo busca a URL /api/public/voz,
+    // que gera o áudio na hora. Falha no envio cai para texto — cliente nunca fica sem resposta.
     const replyTemLink = /https?:\/\/\S+/.test(reply);
+    const audioHabilitado = !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID;
+    const querAudio = audioHabilitado && !replyTemLink && reply.length <= 700;
     let audioEnviado = false;
-    if (clienteMandouAudio && !replyTemLink) {
-      const voz = await gerarAudioElevenLabs(reply);
-      if (voz) {
-        const respAudio = await enviarAudio(numero, voz.base64, stevoKey);
-        if (respAudio.ok) { audioEnviado = true; console.log("[stevo-audio] enviado"); }
-        else console.error("[stevo-audio] falha", respAudio.status, "— caindo para texto");
-      }
+    if (querAudio && msgAssistId) {
+      const sec = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.STEVO_API_KEY || "";
+      const token = crypto.createHmac("sha256", sec).update(msgAssistId).digest("hex").slice(0, 24);
+      const vozUrl = `https://douramor-semijoias.vercel.app/api/public/voz?id=${msgAssistId}&t=${token}`;
+      const respAudio = await enviarAudioMedia(numero, vozUrl, stevoKey);
+      if (respAudio.ok) { audioEnviado = true; console.log("[stevo-audio] enviado via /send/media"); }
+      else console.error("[stevo-audio] /send/media falhou", respAudio.status, "— caindo para texto");
     }
 
     // Enviar blocos com delay entre mensagens e verificação de falha (pulado quando já foi por voz)

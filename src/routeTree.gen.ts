@@ -27,6 +27,7 @@ import { Route as AppAnunciosRouteImport } from './routes/_app/anuncios'
 import { Route as AppAgenteRouteImport } from './routes/_app/agente'
 import { Route as AppAgendamentosRouteImport } from './routes/_app/agendamentos'
 import { Route as ApiPublicWhatsappWebhookRouteImport } from './routes/api/public/whatsapp-webhook'
+import { Route as ApiPublicVozRouteImport } from './routes/api/public/voz'
 import { Route as ApiPublicTriggerAuditoriaRouteImport } from './routes/api/public/trigger-auditoria'
 import { Route as ApiPublicRevisaoIaCronRouteImport } from './routes/api/public/revisao-ia-cron'
 import { Route as ApiPublicPosVendaCronRouteImport } from './routes/api/public/pos-venda-cron'
@@ -129,6 +130,11 @@ const ApiPublicWhatsappWebhookRoute =
     path: '/api/public/whatsapp-webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicVozRoute = ApiPublicVozRouteImport.update({
+  id: '/api/public/voz',
+  path: '/api/public/voz',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicTriggerAuditoriaRoute =
   ApiPublicTriggerAuditoriaRouteImport.update({
     id: '/api/public/trigger-auditoria',
@@ -214,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
+  '/api/public/voz': typeof ApiPublicVozRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -244,6 +251,7 @@ export interface FileRoutesByTo {
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
+  '/api/public/voz': typeof ApiPublicVozRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/api/public/pos-venda-cron': typeof ApiPublicPosVendaCronRoute
   '/api/public/revisao-ia-cron': typeof ApiPublicRevisaoIaCronRoute
   '/api/public/trigger-auditoria': typeof ApiPublicTriggerAuditoriaRoute
+  '/api/public/voz': typeof ApiPublicVozRoute
   '/api/public/whatsapp-webhook': typeof ApiPublicWhatsappWebhookRoute
   '/api/public/hooks/sync-nuvemshop-products': typeof ApiPublicHooksSyncNuvemshopProductsRoute
   '/api/public/nuvemshop/callback': typeof ApiPublicNuvemshopCallbackRoute
@@ -308,6 +317,7 @@ export interface FileRouteTypes {
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
     | '/api/public/trigger-auditoria'
+    | '/api/public/voz'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -338,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
     | '/api/public/trigger-auditoria'
+    | '/api/public/voz'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -369,6 +380,7 @@ export interface FileRouteTypes {
     | '/api/public/pos-venda-cron'
     | '/api/public/revisao-ia-cron'
     | '/api/public/trigger-auditoria'
+    | '/api/public/voz'
     | '/api/public/whatsapp-webhook'
     | '/api/public/hooks/sync-nuvemshop-products'
     | '/api/public/nuvemshop/callback'
@@ -385,6 +397,7 @@ export interface RootRouteChildren {
   ApiPublicPosVendaCronRoute: typeof ApiPublicPosVendaCronRoute
   ApiPublicRevisaoIaCronRoute: typeof ApiPublicRevisaoIaCronRoute
   ApiPublicTriggerAuditoriaRoute: typeof ApiPublicTriggerAuditoriaRoute
+  ApiPublicVozRoute: typeof ApiPublicVozRoute
   ApiPublicWhatsappWebhookRoute: typeof ApiPublicWhatsappWebhookRoute
   ApiPublicHooksSyncNuvemshopProductsRoute: typeof ApiPublicHooksSyncNuvemshopProductsRoute
   ApiPublicNuvemshopCallbackRoute: typeof ApiPublicNuvemshopCallbackRoute
@@ -518,6 +531,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/voz': {
+      id: '/api/public/voz'
+      path: '/api/public/voz'
+      fullPath: '/api/public/voz'
+      preLoaderRoute: typeof ApiPublicVozRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/trigger-auditoria': {
       id: '/api/public/trigger-auditoria'
       path: '/api/public/trigger-auditoria'
@@ -649,6 +669,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicPosVendaCronRoute: ApiPublicPosVendaCronRoute,
   ApiPublicRevisaoIaCronRoute: ApiPublicRevisaoIaCronRoute,
   ApiPublicTriggerAuditoriaRoute: ApiPublicTriggerAuditoriaRoute,
+  ApiPublicVozRoute: ApiPublicVozRoute,
   ApiPublicWhatsappWebhookRoute: ApiPublicWhatsappWebhookRoute,
   ApiPublicHooksSyncNuvemshopProductsRoute:
     ApiPublicHooksSyncNuvemshopProductsRoute,

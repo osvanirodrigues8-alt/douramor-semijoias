@@ -706,6 +706,40 @@ export async function gerarAudioElevenLabs(texto: string): Promise<{ base64: str
   }
 }
 
+// Igual a gerarAudioElevenLabs, mas retorna os bytes (Buffer) — usado pelo endpoint /api/public/voz
+// que serve o áudio diretamente para o Stevo buscar.
+export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  const apiKey = (process.env.ELEVENLABS_API_KEY ?? "").trim();
+  const voiceId = (process.env.ELEVENLABS_VOICE_ID ?? "").trim();
+  if (!apiKey || !voiceId) return null;
+  const falavel = prepararTextoParaVoz(texto);
+  if (!falavel) return null;
+  const textoFinal = falavel.slice(0, 800);
+  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_turbo_v2_5").trim();
+  try {
+    const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({
+        text: textoFinal,
+        model_id: modelId,
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!resp.ok) {
+      console.error("[gerarAudioElevenLabsBytes] erro", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
+      return null;
+    }
+    const buf = await resp.arrayBuffer();
+    if (!buf.byteLength) return null;
+    return { buffer: Buffer.from(buf), mime: "audio/mpeg" };
+  } catch (e) {
+    console.error("[gerarAudioElevenLabsBytes] fail", e);
+    return null;
+  }
+}
+
 export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; categoria: string | null } {
   const t = desc.toLowerCase();
   const kw = new Set<string>();
