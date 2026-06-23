@@ -6,6 +6,8 @@ import {
   calcularProximoFollowup,
   dentroDoHorario,
   detectarTemperatura,
+  normalizarMensagensIA,
+  callAnthropicMessages,
 } from "@/lib/shared/prompt";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
@@ -29,8 +31,8 @@ async function handleCronRequest(request: Request, label: string): Promise<Respo
 
 async function processFollowUps() {
   const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
-    supabaseAdmin.from("configuracoes").select("*").limit(1).maybeSingle(),
-    supabaseAdmin.from("configuracoes_agente").select("*").limit(1).maybeSingle(),
+    supabaseAdmin.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
+    supabaseAdmin.from("configuracoes_agente").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (!cfg || !cfgAg) return { ok: true, skipped: "config não encontrada" };
   // Correção PROBLEMA 2: verificar ambos os nomes possíveis do campo
@@ -131,15 +133,18 @@ async function processFollowUps() {
         modoFollowup: numeroTentativa,
       });
 
-      const userMessages = [
-        ...(hist ?? []).map((m: any) => ({ role: m.papel, content: m.conteudo })),
-        { role: "user", content: "(sem resposta)" },
-      ];
+      const userMessages = normalizarMensagensIA([
+        ...(hist ?? []).map((m: any) => ({ role: m.papel as "user" | "assistant", content: m.conteudo })),
+        { role: "user" as const, content: "(sem resposta)" },
+      ]);
 
-      const aiResp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": process.env.ANTHROPIC_API_KEY ?? "", "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: userMessages }),
+      const aiResp = await callAnthropicMessages({
+        apiKey: process.env.ANTHROPIC_API_KEY ?? "",
+        model: cfg.modelo_ia,
+        system: systemPrompt,
+        messages: userMessages,
+        maxTokens: 1024,
+        temperature: 0.4,
       });
       if (!aiResp.ok) {
         resultados.push({ conv: conv.id, erro: `AI ${aiResp.status}` });

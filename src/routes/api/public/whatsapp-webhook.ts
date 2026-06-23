@@ -12,6 +12,8 @@ import {
   transcreverAudioBase64,
   descreverImagem,
   extrairKeywordsDeDescricao,
+  normalizarMensagensIA,
+  callAnthropicMessages,
 } from "@/lib/shared/prompt";
 import crypto from "node:crypto";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
@@ -704,7 +706,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
       cepRecebidoAgora: !!cepNaMsg, categoriaPedida: categoriaPrincipal,
-      mensagemCitada: quotedText, urlCitada: quotedUrl,
+      mensagemCitada: quotedText, urlCitada: quotedUrl, generoCliente: generoFiltro,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
@@ -725,26 +727,22 @@ async function handleWebhook(request: Request): Promise<Response> {
       { role: "user" as const, content: mascararPII(text) },
     ];
 
-    // Mesclar mensagens consecutivas do mesmo papel (Anthropic rejeita 400 se houver)
-    // Pode ocorrer quando o Stevo retenta e insere msg duplicada no banco
-    const messagesParaIA = rawMessages.reduce((acc: { role: "user" | "assistant"; content: string }[], m) => {
-      if (acc.length > 0 && acc[acc.length - 1].role === m.role) {
-        acc[acc.length - 1].content += "\n" + m.content;
-      } else {
-        acc.push({ role: m.role, content: m.content });
-      }
-      return acc;
-    }, []);
+    // Normaliza para o formato da Anthropic: mescla papéis consecutivos E descarta
+    // 'assistant' inicial (a API exige começar com 'user', senão 400 → resposta genérica).
+    const messagesParaIA = normalizarMensagensIA(rawMessages);
 
     // Chamar Anthropic com timeout de 25s
     const ac = new AbortController();
     const aiTimer = setTimeout(() => ac.abort(), 25000);
     let aiResp: Response;
     try {
-      aiResp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: messagesParaIA }),
+      aiResp = await callAnthropicMessages({
+        apiKey: ANTHROPIC_KEY,
+        model: cfg.modelo_ia,
+        system: systemPrompt,
+        messages: messagesParaIA,
+        maxTokens: 1024,
+        temperature: 0.4,
         signal: ac.signal,
       });
     } catch (e: any) {
@@ -901,7 +899,9 @@ async function handleWebhook(request: Request): Promise<Response> {
         .in("url_produto", urlsProdutoFaltando.slice(0, 3));
       for (const p of (extras ?? [])) if (p.url_foto && !candidatosFoto.some((c) => c.id === p.id)) candidatosFoto.push(p);
     }
-    const produtosMencionados = candidatosFoto.filter((p) => !enviadasSet.has(p.id)).slice(0, 3);
+    // Respeita o toggle "Enviar foto do catálogo" do painel (default: ligado).
+    const enviarFotos = cfg?.enviar_foto_catalogo !== false;
+    const produtosMencionados = (enviarFotos ? candidatosFoto.filter((p) => !enviadasSet.has(p.id)) : []).slice(0, 3);
     for (const p of produtosMencionados) {
       await new Promise((r) => setTimeout(r, 300));
       try {

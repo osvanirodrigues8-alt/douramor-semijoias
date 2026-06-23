@@ -38,8 +38,8 @@ function Agente() {
   const [faqs, setFaqs] = useState<Faq[]>([]);
 
   useEffect(() => {
-    supabase.from("configuracoes").select("*").limit(1).maybeSingle().then(({ data }) => setCfg(data));
-    supabase.from("configuracoes_agente").select("*").limit(1).maybeSingle().then(({ data }) => setCfgAg(data));
+    supabase.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle().then(({ data }) => setCfg(data));
+    supabase.from("configuracoes_agente").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle().then(({ data }) => setCfgAg(data));
     loadFaqs();
   }, []);
 

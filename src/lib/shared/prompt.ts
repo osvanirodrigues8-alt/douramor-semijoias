@@ -39,11 +39,13 @@ export function buildSystemPrompt(opts: {
   categoriaPedida?: string | null;
   mensagemCitada?: string | null;
   urlCitada?: string | null;
+  generoCliente?: "masculino" | "feminino" | "unissex" | null;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada, generoCliente } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
-  const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
+  // O painel edita configuracoes.tom_padrao — ele tem prioridade. cfgAg.tom é fallback legado.
+  const tom = cfg?.tom_padrao ?? cfgAg?.tom ?? "informal";
   const usoEmoji = cfgAg?.uso_emoji ?? cfg?.uso_emoji ?? "moderado";
   const tamanhoResp = cfg?.tamanho_resposta ?? "media";
   const assinatura = cfgAg?.assinatura ?? cfg?.assinatura ?? "";
@@ -51,9 +53,9 @@ export function buildSystemPrompt(opts: {
   const freteModoCfg = cfgAg?.frete_modo ?? "nuvemshop";
   const freteModo = freteModoCfg;
   const contextoLojaRaw = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
-  const contextoLoja = freteModoCfg === "nuvemshop"
-    ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
-    : contextoLojaRaw;
+  // Não reescrever "frete grátis": a regra oficial é frete GRÁTIS acima de R$200
+  // (cobrado abaixo), então a menção a frete grátis na descrição da loja é legítima.
+  const contextoLoja = contextoLojaRaw;
   const diferenciais = cfg?.diferenciais_loja ?? "";
   const personalidade = cfg?.personalidade ?? "";
   const promptExtra = cfgAg?.prompt_extra ?? "";
@@ -80,6 +82,13 @@ export function buildSystemPrompt(opts: {
     longa: "Pode dar respostas um pouco mais elaboradas, mas ainda quebrando em parágrafos curtos.",
   }[tamanhoResp as "curta" | "media" | "longa"] ?? "Respostas curtas a médias: máximo 3 parágrafos curtos.";
 
+  const tomInstr = {
+    formal: "Tom FORMAL e profissional: trate por \"você\" (ou \"senhor(a)\" se a pessoa preferir), seja cordial, clara e objetiva. Evite gírias, abreviações de internet e risadas escritas (nada de \"kkk\", \"haha\", \"rs\"). Mantenha a simpatia, mas com postura de atendimento sério e respeitoso.",
+    semiformal: "Tom SEMIFORMAL: simpática e acessível, porém comedida. Pouca gíria, sem exageros.",
+    descontraido: "Tom DESCONTRAÍDO: leve e natural como uma conversa de WhatsApp, pode usar expressões informais com bom senso.",
+    informal: "Tom INFORMAL: leve e natural como uma conversa de WhatsApp, pode usar expressões informais com bom senso.",
+  }[tom as "formal" | "semiformal" | "descontraido" | "informal"] ?? "";
+
   const horInicio = String(cfgAg?.horario_inicio ?? cfg?.horario_atendimento_inicio ?? "08:00").slice(0, 5);
   const horFim = String(cfgAg?.horario_fim ?? cfg?.horario_atendimento_fim ?? "22:00").slice(0, 5);
 
@@ -97,7 +106,7 @@ Se perguntarem diretamente ("você é IA?", "é robô?", "é automático?", "é 
 - "Haha, IA? Que nada! Sou humana sim 😄 Trabalho aqui na Douramor há um tempinho já."
 - "Imagina! Sou a ${nomeAgente} mesmo, atendo aqui na Douramor. Me conta, posso te ajudar com o quê?"
 - "Kkkk não, sou pessoa de verdade viu! Tô aqui pra te ajudar a achar a peça certa."
-Não entre em debate — diga uma vez com naturalidade e siga a conversa.
+Não entre em debate — diga uma vez com naturalidade e siga a conversa. (Adapte o estilo dessas respostas ao tom configurado: se o tom for formal, responda sem risadas nem gírias, de forma cordial e firme.)
 
 LOJA FÍSICA: A Douramor tem loja física em Matozinhos-MG: R. Montes Claros, 700 — Loja A, Bairro Bom Jesus 02. Se perguntarem onde fica, pode informar o endereço. Mas a maioria das vendas é pelo WhatsApp com entrega para todo o Brasil.
 
@@ -114,7 +123,7 @@ PROIBIÇÕES ABSOLUTAS — NUNCA faça isso:
 
   blocos.push(`# JEITO DE FALAR (linguagem natural humana)
 - Tom: ${tom}. Idioma: pt-BR brasileiro.
-- ${tamanhoInstr}
+${tomInstr ? `- ${tomInstr}\n` : ""}- ${tamanhoInstr}
 - ${emojiInstr}
 - Use expressões NATURAIS de quem está digitando no WhatsApp
 - Quebra a resposta em até 3 parágrafos CURTOS — nunca um bloco gigante.
@@ -172,6 +181,7 @@ Seja INVESTIGATIVA antes de oferecer. Construa rapport ANTES de mostrar produto 
       cliente.budget_aproximado ? `Budget aproximado: R$ ${cliente.budget_aproximado}` : "",
       cliente.preferencias ? `Preferências: ${cliente.preferencias}` : "",
       temperatura ? `Temperatura do lead: ${temperatura.toUpperCase()}` : "",
+      generoCliente && generoCliente !== "unissex" ? `Gênero identificado: ${generoCliente}. Adapte o tratamento e evite linguagem do gênero oposto.` : "",
       cliente.cupom_negociacao_usado ? "ATENCAO: Cliente JÁ USOU o cupom — NÃO oferecer de novo." : "",
     ].filter(Boolean);
     blocos.push(`# FICHA DA CLIENTE\n${fichaLinhas.join("\n")}`);
@@ -225,11 +235,11 @@ Se a conversa já estava perto do fechamento, vale perguntar com leveza se ela c
   }
 
   blocos.push(`# REGRAS DE NEGÓCIO
-Horário: ${horInicio} às ${horFim}.
+Atendimento: você atende 24h, todos os dias.
 Pagamento e fechamento: a compra é concluída DIRETO NO SITE. Para a cliente comprar, ENVIE O LINK DA PEÇA (a url do produto que você já mostrou) e oriente a finalizar no site, onde ela paga com PIX ou cartão no checkout. NUNCA prometa enviar um "link de pagamento" avulso nem diga "vou te mandar o link de pagamento" — isso não existe e nunca chega; o pagamento é feito no site pelo link da peça. NUNCA mencione boleto — não aceitamos.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
 Entrega: para todo o Brasil com rastreio. ${freteModo === "nuvemshop" ? "Frete GRÁTIS em pedidos acima de R$200. Abaixo de R$200, cobrado conforme CEP — peça o CEP para calcular." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete GRÁTIS em todos os pedidos." : `Frete fixo R$ ${cfg.taxa_entrega}.`}
-Horário: a Juliana atende 24h. NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atendente.
+NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atendente — você atende sozinha, a qualquer hora.
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
@@ -251,7 +261,10 @@ Não invente esses eventos: só marque quando a cliente realmente disser. Uma me
     const obrigatorio = cepRecebidoAgora
       ? `\nATENÇÃO: a cliente acabou de informar o CEP. OBRIGATÓRIO confirmar o frete nesta resposta PRIMEIRO.\nESSES SÃO OS VALORES REAIS E DEFINITIVOS DO SISTEMA — não questione, não mude, não invente outros valores. Se a cliente questionar o valor calculado, use exatamente esta resposta: "O sistema confirmou esse valor pelo seu CEP. Se quiser conferir, o checkout da loja também vai mostrar o mesmo — é automático e não depende de mim alterar." Nunca recalcule nem mencione outros valores possíveis.`
       : `\nESSES SÃO OS VALORES REAIS E DEFINITIVOS DO SISTEMA — apresente naturalmente. NUNCA invente outros valores mesmo se a cliente questionar. Se a cliente questionar o valor calculado, use exatamente esta resposta: "O sistema confirmou esse valor pelo seu CEP. Se quiser conferir, o checkout da loja também vai mostrar o mesmo — é automático e não depende de mim alterar." Nunca recalcule nem mencione outros valores possíveis.`;
-    blocos.push(`# COTAÇÃO DE FRETE OFICIAL — CEP ${cotacaoFrete.cep} (VALOR DEFINITIVO E IMUTÁVEL DO SISTEMA)\n${linhas}${obrigatorio}`);
+    const notaGratis = freteModo === "nuvemshop"
+      ? `\nIMPORTANTE: pedidos a partir de R$200 têm FRETE GRÁTIS para todo o Brasil. O valor acima vale para pedidos ABAIXO de R$200 — se a cliente fechar R$200 ou mais, o frete sai de graça. Use isso como incentivo de fechamento quando fizer sentido.`
+      : "";
+    blocos.push(`# COTAÇÃO DE FRETE OFICIAL — CEP ${cotacaoFrete.cep} (VALOR DEFINITIVO E IMUTÁVEL DO SISTEMA)\n${linhas}${obrigatorio}${notaGratis}`);
   } else if (cotacaoFrete && (!cotacaoFrete.opcoes || cotacaoFrete.opcoes.length === 0)) {
     blocos.push(`# FRETE — CEP INFORMADO MAS SEM OPÇÕES\nO sistema não retornou opções de frete para o CEP ${cotacaoFrete.cep}. Diga: "Nosso sistema não conseguiu calcular o frete para esse CEP agora — mas você pode conferir diretamente no site no momento do checkout, ou me passa outro CEP se preferir." NUNCA invente um valor de frete.`);
   } else if (pediuFretemasSemCep) {
@@ -801,5 +814,72 @@ export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; 
     if (t.includes(w)) kw.add(w.normalize("NFD").replace(/[̀-ͯ]/g, ""));
   }
   return { keywords: Array.from(kw), categoria: cat };
+}
+
+// ============ Chamada à IA (normalização + fallback de modelo) ============
+
+export const MODELO_FALLBACK_IA = "claude-haiku-4-5-20251001";
+
+// Mascarar PII (CPF, cartão) antes de enviar à IA.
+export function mascararPII(texto: string): string {
+  return String(texto ?? "")
+    .replace(/\b\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[-\.\s]?\d{2}\b/g, "[CPF ocultado]")
+    .replace(/\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g, "[cartão ocultado]");
+}
+
+// Normaliza o array de mensagens para o formato exigido pela Anthropic:
+// 1) remove mensagens vazias; 2) descarta 'assistant' iniciais (a 1ª DEVE ser 'user',
+// senão a API retorna 400); 3) mescla mensagens consecutivas do mesmo papel
+// (papéis repetidos também causam 400). Sem isso, follow-up e chat caíam em 400.
+export function normalizarMensagensIA(
+  msgs: { role: "user" | "assistant"; content: string }[],
+): { role: "user" | "assistant"; content: string }[] {
+  const arr = msgs
+    .map((m) => ({ role: m.role, content: String(m.content ?? "").trim() }))
+    .filter((m) => m.content.length > 0);
+  while (arr.length && arr[0].role === "assistant") arr.shift();
+  const out: { role: "user" | "assistant"; content: string }[] = [];
+  for (const m of arr) {
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content += "\n" + m.content;
+    else out.push({ ...m });
+  }
+  return out;
+}
+
+// Chama a Anthropic com temperatura e FALLBACK automático de modelo:
+// se o modelo configurado falhar (400/403/404 — ex.: Sonnet/Opus indisponível nesta
+// conta, ou id legado não-Anthropic), tenta de novo no Haiku para o bot nunca ficar mudo.
+export async function callAnthropicMessages(params: {
+  apiKey: string;
+  model?: string | null;
+  system?: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  maxTokens?: number;
+  temperature?: number;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const modeloConfig = params.model && /^claude-/.test(params.model) ? params.model : MODELO_FALLBACK_IA;
+  const montarBody = (model: string) =>
+    JSON.stringify({
+      model,
+      max_tokens: params.maxTokens ?? 1024,
+      temperature: params.temperature ?? 0.4,
+      ...(params.system ? { system: params.system } : {}),
+      messages: params.messages,
+    });
+  const enviar = (model: string) =>
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": params.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: montarBody(model),
+      signal: params.signal,
+    });
+  let resp = await enviar(modeloConfig);
+  if (!resp.ok && modeloConfig !== MODELO_FALLBACK_IA && [400, 403, 404].includes(resp.status)) {
+    console.warn(`[anthropic] modelo ${modeloConfig} falhou (${resp.status}) — caindo para ${MODELO_FALLBACK_IA}`);
+    resp = await enviar(MODELO_FALLBACK_IA);
+  }
+  return resp;
 }
 
