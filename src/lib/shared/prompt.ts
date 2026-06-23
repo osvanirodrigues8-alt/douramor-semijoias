@@ -165,7 +165,7 @@ Seja INVESTIGATIVA antes de oferecer. Construa rapport ANTES de mostrar produto 
 
   if (cliente) {
     const fichaLinhas = [
-      primeiroNome ? `Nome: ${primeiroNome} — use com naturalidade, NÃO repita em toda mensagem.` : "Nome: ainda não sabe — descubra naturalmente.",
+      primeiroNome ? `Nome da cliente: "${primeiroNome}" — se for citar, escreva EXATAMENTE assim, NUNCA mude a grafia nem invente variações parecidas. Use no MÁXIMO 1 vez na conversa; na maioria das mensagens nem precisa citar o nome.` : "Nome: ainda não sabe — descubra naturalmente.",
       recorrente ? `JÁ É CLIENTE RECORRENTE — ${cliente.total_pedidos} pedido(s) anteriores.` : "Primeira interação.",
       cliente.categoria_favorita ? `Categoria favorita: ${cliente.categoria_favorita}` : "",
       cliente.estilo_preferido ? `Estilo preferido: ${cliente.estilo_preferido}` : "",
