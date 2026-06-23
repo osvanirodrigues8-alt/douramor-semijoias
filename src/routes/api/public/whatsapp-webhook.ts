@@ -281,14 +281,26 @@ async function handleWebhook(request: Request): Promise<Response> {
       const { data: conv } = await supabaseAdmin.from("conversas").select("id, precisa_humano").eq("sessao_token", sessao_token).maybeSingle();
       if (!conv) return new Response(JSON.stringify({ ok: true, ignored: "fromMe sem conversa" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
-      // Verificar eco: texto já existe como mensagem da IA nos últimos 60s
-      const umMinutoAtras = new Date(Date.now() - 60000).toISOString();
+      // Verificar eco: o Stevo devolve as mensagens enviadas pela PRÓPRIA Juliana como fromMe.
+      // Comparação NORMALIZADA (sem emoji/pontuação/espaço) e por continência, porque o eco volta
+      // com formatação levemente diferente. Um falso "humano manual" CONGELA o bot — então aqui
+      // erramos para o lado de detectar eco (viés seguro: a Juliana sempre volta a responder).
+      const normEco = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+      const tresMinAtras = new Date(Date.now() - 180000).toISOString();
       const { data: recentes } = await supabaseAdmin.from("mensagens")
         .select("conteudo")
         .eq("conversa_id", conv.id)
         .eq("papel", "assistant")
-        .gte("criado_em", umMinutoAtras);
-      const isEco = (recentes ?? []).some((m: any) => String(m.conteudo ?? "").trim() === text!.trim());
+        .gte("criado_em", tresMinAtras);
+      const alvo = normEco(text!);
+      const isEco = !!alvo && (recentes ?? []).some((m: any) => {
+        const a = normEco(String(m.conteudo ?? ""));
+        if (!a) return false;
+        if (a === alvo) return true;
+        const menor = Math.min(a.length, alvo.length);
+        return menor >= 10 && (a.includes(alvo) || alvo.includes(a)); // eco pode ser um bloco da resposta
+      });
       if (isEco) return new Response(JSON.stringify({ ok: true, ignored: "eco" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
       // Registrar mensagem do atendente humano
