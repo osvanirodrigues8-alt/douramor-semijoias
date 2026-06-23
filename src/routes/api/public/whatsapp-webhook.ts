@@ -380,6 +380,21 @@ async function handleWebhook(request: Request): Promise<Response> {
     }
     if (!conversa) throw new Error("Falha ao criar/encontrar conversa");
 
+    // ANTI-DUPLICATA: o Stevo reentrega a MESMA mensagem quando o webhook demora a responder
+    // (o delay humanizador faz a função passar de 10s), e a coluna stevo_message_id não existe no
+    // banco — então a idempotência por id não funciona. Proteção por conteúdo+tempo: se uma mensagem
+    // IDÊNTICA do usuário chegou nos últimos 30s nesta conversa, ignora a reentrega (evita resposta dupla).
+    {
+      const trintaSegAtras = new Date(Date.now() - 30000).toISOString();
+      const { data: dup } = await supabaseAdmin.from("mensagens")
+        .select("id").eq("conversa_id", conversa.id).eq("papel", "user").eq("conteudo", text)
+        .gte("criado_em", trintaSegAtras).limit(1).maybeSingle();
+      if (dup) {
+        console.log("[anti-dup] mensagem idêntica do usuário nos últimos 30s — ignorando reentrega do Stevo");
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_recent" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+    }
+
     // --- BUSCAR HISTÓRICO ANTES DE INSERIR MENSAGEM DO USUÁRIO ---
     const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data: histRaw } = await supabaseAdmin.from("mensagens")
