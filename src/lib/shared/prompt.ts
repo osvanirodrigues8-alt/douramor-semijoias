@@ -219,7 +219,8 @@ NUNCA pergunte "quer comprar?". Use perguntas de alternativa.`);
     blocos.push(`# MODO FOLLOW-UP (tentativa ${modoFollowup})
 ${angulo}
 UMA mensagem CURTA (1-2 frases máx). Não soe automática.
-NÃO faça pergunta de diagnóstico (ex: "é pra você ou presente?"). Se precisar de engajamento, use pergunta sobre o produto específico já mostrado anteriormente.`);
+NÃO faça pergunta de diagnóstico (ex: "é pra você ou presente?"). Se precisar de engajamento, use pergunta sobre o produto específico já mostrado anteriormente.
+Se a conversa já estava perto do fechamento, vale perguntar com leveza se ela conseguiu finalizar a comprinha (sem pressionar). Lembre das tags de CONTROLE INTERNO: se ela disser que comprou use [COMPROU]; se marcar um dia pra você voltar use [AGENDAR:N]; se pedir pra parar use [PARAR].`);
   }
 
   blocos.push(`# REGRAS DE NEGÓCIO
@@ -231,6 +232,14 @@ Horário: a Juliana atende 24h. NUNCA mencione que vai passar para equipe humana
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
+
+  // Controle interno de follow-up: a IA sinaliza eventos com tags que o sistema remove antes de enviar.
+  blocos.push(`# CONTROLE INTERNO DE FOLLOW-UP (tags invisíveis)
+Estas tags NÃO aparecem para a cliente (o sistema as remove) — NUNCA fale sobre elas nem as leia em voz. Use SÓ quando a situação for clara:
+- [COMPROU] — quando a cliente confirmar que JÁ comprou/pagou/finalizou o pedido. Comemore com ela e parta para o pós-venda. Coloque a tag no FINAL da mensagem.
+- [PARAR] — quando a cliente pedir claramente para você NÃO insistir / parar de chamar. Respeite com educação e coloque [PARAR] no final.
+- [AGENDAR:N] — quando a cliente pedir para você retornar/chamar depois (ex.: "me chama amanhã" = N=1; "semana que vem" = N=7; "daqui uns dias" = N=3). Confirme o combinado de forma natural e coloque [AGENDAR:N] no final, com N = número de dias até o retorno.
+Não invente esses eventos: só marque quando a cliente realmente disser. Uma mensagem nunca leva mais de uma dessas tags.`);
 
   if (cotacaoFrete && cotacaoFrete.opcoes?.length) {
     const linhas = cotacaoFrete.opcoes.map((o) => {
@@ -465,8 +474,8 @@ export function calcularProximoFollowup(
   diaAtual: number,
   agora = new Date(),
 ): { proximo: Date | null; novoDia: number; resetar: boolean } {
-  const max = cfgAg?.max_fups_dia ?? 3;
-  const diasTotal = cfgAg?.dias_total ?? 7;
+  const max = cfgAg?.max_fups_dia ?? 1; // padrão: 1 follow-up por dia
+  const diasTotal = cfgAg?.dias_total ?? 10; // padrão: por 10 dias
   const h1 = Number(cfgAg?.fup1_horas ?? 3);
   const h2 = Number(cfgAg?.fup2_horas ?? 5);
   const h3 = Number(cfgAg?.fup3_horas ?? 4);

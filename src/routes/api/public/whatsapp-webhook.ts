@@ -769,6 +769,29 @@ async function handleWebhook(request: Request): Promise<Response> {
     reply = reply.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
     const marcarHumano = false;
 
+    // ─── Controle de follow-up por tags invisíveis emitidas pela IA ───────────
+    // [COMPROU] = cliente confirmou compra; [PARAR] = pediu pra não insistir;
+    // [AGENDAR:N] = pediu retorno em N dias. Remove as tags e ajusta o follow-up
+    // reusando campos existentes (dia_followup_atual alto = cron para; proximo_followup_em = data do retorno).
+    const tagComprou = /\[COMPROU\]/i.test(reply);
+    const tagParar = /\[PARAR\]/i.test(reply);
+    const tagAgendar = reply.match(/\[AGENDAR:\s*(\d{1,3})\]/i);
+    reply = reply.replace(/\[COMPROU\]/gi, "").replace(/\[PARAR\]/gi, "").replace(/\[AGENDAR:\s*\d{1,3}\]/gi, "").trim();
+    const fupUpdate: Record<string, any> = {};
+    if (tagComprou || tagParar) {
+      fupUpdate.dia_followup_atual = 999; // encerra o ciclo de follow-up desta conversa
+      fupUpdate.proximo_followup_em = null;
+      fupUpdate.fups_enviados_hoje = 0;
+      if (tagComprou) fupUpdate.intencao_compra_em = new Date().toISOString();
+      console.log("[follow-up]", tagComprou ? "cliente comprou — follow-up encerrado" : "cliente pediu parar — follow-up encerrado");
+    } else if (tagAgendar) {
+      const n = Math.min(60, Math.max(1, Number(tagAgendar[1])));
+      const d = new Date(); d.setDate(d.getDate() + n); d.setHours(8, 0, 0, 0);
+      fupUpdate.proximo_followup_em = d.toISOString();
+      fupUpdate.fups_enviados_hoje = 0;
+      console.log("[follow-up] retorno agendado para", n, "dia(s) — próximo follow-up em", d.toISOString());
+    }
+
     const novosMostrados = new Set(jaMostrados);
     const novosVistosIds = new Set<string>((cliente.produtos_vistos ?? []) as string[]);
     const replyLower = reply.toLowerCase();
@@ -808,6 +831,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       supabaseAdmin.from("conversas").update({
         produtos_mostrados: Array.from(novosMostrados),
         tentativas_sem_resultado: novaTentativaSemResultado,
+        ...fupUpdate,
       }).eq("id", conversa.id).then(({ error }) => { if (error) console.error("[conversas update]", error); }),
       supabaseAdmin.from("clientes").update({
         produtos_vistos: Array.from(novosVistosIds),

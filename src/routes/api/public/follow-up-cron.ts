@@ -43,7 +43,7 @@ async function processFollowUps() {
   const hoje = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
 
   // Elegíveis: conversas whatsapp, última msg assistant, ainda dentro do ciclo de dias, com proximo_followup_em vencido (ou sem agendamento ainda)
-  const diasTotal = Number(cfgAg.dias_total ?? 7);
+  const diasTotal = Number(cfgAg.dias_total ?? 10);
   const limiteInicial = new Date(Date.now() - Number(cfgAg.fup1_horas ?? 3) * 3600_000).toISOString();
   // Correção PROBLEMA 2 (conversa ativa): exigir que a última msg tenha pelo menos 2h de silêncio
   const limite2h = new Date(Date.now() - 2 * 3600_000).toISOString();
