@@ -654,17 +654,24 @@ export async function descreverImagem(url: string, apiKey: string): Promise<stri
   }
 }
 
-// Limpa o texto antes de virar voz: remove links, emojis e markdown que soariam estranhos falados.
+// Limpa o texto antes de virar voz: remove links/markdown/emojis e trata risadas.
+// comTags=true (modelo v3): converte risadas escritas (kkk/haha/😂) no audio tag [laughs],
+// que o v3 transforma numa risada NATURAL. comTags=false: remove a risada (outros modelos
+// leriam "[laughs]" ou "kkk" literalmente, soando robótico).
 // Retorna null se, depois de limpar, não sobrar nada falável (ex.: resposta era só um link).
-export function prepararTextoParaVoz(texto: string): string | null {
-  const limpo = texto
-    .replace(/https?:\/\/\S+/g, "")                 // links não se fala em voz
-    .replace(/[*_`~#>]/g, "")                        // marcadores de markdown
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, "") // emojis/símbolos
+export function prepararTextoParaVoz(texto: string, comTags = false): string | null {
+  const risada = comTags ? " [laughs] " : " ";
+  let s = texto
+    .replace(/https?:\/\/\S+/g, "")                                   // links não se fala em voz
+    .replace(/[\u{1F602}\u{1F923}\u{1F606}\u{1F605}]/gu, risada)       // 😂🤣😆😅 → risada
+    .replace(/\b(?:k{2,}|rs(?:rs)+|ha(?:ha)+|he(?:he)+|hue(?:hue)+|hah|kkk)\b/gi, risada) // kkk/haha/rsrs → risada
+    .replace(/[*_`~#>]/g, "")                                          // marcadores de markdown
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, "") // emojis restantes
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();
-  return limpo.length >= 2 ? limpo : null;
+  if (comTags) s = s.replace(/(?:\[laughs\]\s*){2,}/gi, "[laughs] ").trim(); // colapsa risadas repetidas
+  return s.length >= 2 ? s : null;
 }
 
 // Gera áudio (nota de voz) a partir de texto via ElevenLabs. Retorna base64 + mime, ou null se falhar.
@@ -716,29 +723,43 @@ export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer
   const apiKey = (process.env.ELEVENLABS_API_KEY ?? "").trim();
   const voiceId = (process.env.ELEVENLABS_VOICE_ID ?? "").trim();
   if (!apiKey || !voiceId) return null;
-  const falavel = prepararTextoParaVoz(texto);
-  if (!falavel) return null;
-  const textoFinal = falavel.slice(0, 800);
-  // multilingual_v2 = voz mais natural/expressiva p/ pt-BR (turbo é mais rápido porém "chapado").
-  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_multilingual_v2").trim();
 
-  const pedir = (vid: string) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
-    method: "POST",
-    headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
-    body: JSON.stringify({
-      text: textoFinal,
-      model_id: modelId,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true },
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
+  // eleven_v3 = modelo mais humano/expressivo e entende audio tags ([laughs] etc). Latência maior,
+  // mas como é nota de voz assíncrona, tudo bem. Se o v3 falhar, cai para multilingual_v2.
+  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_v3").trim();
+  const ehV3 = /v3/i.test(modelId);
+
+  // v3: stability "Natural" (0.5) = expressivo e estável. v2: stability menor + leve style p/ emoção.
+  const settingsV3 = { stability: 0.5, similarity_boost: 0.8, use_speaker_boost: true };
+  const settingsV2 = { stability: 0.4, similarity_boost: 0.75, style: 0.25, use_speaker_boost: true };
+
+  const pedir = (vid: string, model: string, text: string, settings: Record<string, unknown>) =>
+    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
+      method: "POST",
+      headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+      body: JSON.stringify({ text, model_id: model, voice_settings: settings }),
+      signal: AbortSignal.timeout(25000),
+    });
+
+  const textoTags = prepararTextoParaVoz(texto, ehV3);
+  if (!textoTags) return null;
+  const textoFinal = textoTags.slice(0, 800);
 
   try {
-    let resp = await pedir(voiceId);
-    // Plano grátis não usa voz da biblioteca via API (402) → cai para uma voz premade que funciona.
+    let resp = await pedir(voiceId, modelId, textoFinal, ehV3 ? settingsV3 : settingsV2);
+    // Voz da biblioteca no plano grátis (402) → voz premade que funciona.
     if (resp.status === 402 && voiceId !== VOZ_PREMADE_FALLBACK) {
-      console.warn("[tts] voz configurada exige plano pago (402); usando voz premade fallback");
-      resp = await pedir(VOZ_PREMADE_FALLBACK);
+      console.warn("[tts] voz exige plano pago (402); usando voz premade fallback");
+      resp = await pedir(VOZ_PREMADE_FALLBACK, modelId, textoFinal, ehV3 ? settingsV3 : settingsV2);
+    }
+    // v3 indisponível/erro → cai para multilingual_v2 com o texto SEM audio tags (que ele leria literal).
+    if (!resp.ok && ehV3) {
+      console.warn("[tts] v3 falhou (", resp.status, ") — caindo para multilingual_v2");
+      const textoSimples = (prepararTextoParaVoz(texto, false) ?? textoFinal).slice(0, 800);
+      resp = await pedir(voiceId, "eleven_multilingual_v2", textoSimples, settingsV2);
+      if (resp.status === 402 && voiceId !== VOZ_PREMADE_FALLBACK) {
+        resp = await pedir(VOZ_PREMADE_FALLBACK, "eleven_multilingual_v2", textoSimples, settingsV2);
+      }
     }
     if (!resp.ok) {
       console.error("[gerarAudioElevenLabsBytes] erro", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
