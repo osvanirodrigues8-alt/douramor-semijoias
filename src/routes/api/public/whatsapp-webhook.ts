@@ -873,7 +873,20 @@ async function handleWebhook(request: Request): Promise<Response> {
     // Enviar fotos de produtos mencionados
     const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
     const enviadasSet = new Set(fotosEnviadasAnt);
-    const produtosMencionados = produtos.filter((p) => p.url_foto && novosVistosIds.has(p.id) && !enviadasSet.has(p.id)).slice(0, 3);
+    // Produtos a fotografar: os da busca atual mencionados na resposta...
+    const candidatosFoto: any[] = produtos.filter((p) => p.url_foto && novosVistosIds.has(p.id));
+    // ...MAIS qualquer peça LINKADA na resposta que não estava na busca atual — garante que a FOTO
+    // sempre acompanha o link da peça (busca no banco pelo url_produto).
+    const urlsNaResposta = (reply.match(/https?:\/\/[^\s)]+/g) ?? []).map((u) => u.replace(/[.,;)]+$/, ""));
+    const urlsCobertas = new Set(candidatosFoto.map((p) => p.url_produto).filter(Boolean));
+    const urlsProdutoFaltando = urlsNaResposta.filter((u) => /\/produtos\//i.test(u) && !urlsCobertas.has(u));
+    if (urlsProdutoFaltando.length) {
+      const { data: extras } = await supabaseAdmin.from("produtos")
+        .select("id,nome,preco,url_produto,url_foto")
+        .in("url_produto", urlsProdutoFaltando.slice(0, 3));
+      for (const p of (extras ?? [])) if (p.url_foto && !candidatosFoto.some((c) => c.id === p.id)) candidatosFoto.push(p);
+    }
+    const produtosMencionados = candidatosFoto.filter((p) => !enviadasSet.has(p.id)).slice(0, 3);
     for (const p of produtosMencionados) {
       await new Promise((r) => setTimeout(r, 300));
       try {
