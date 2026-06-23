@@ -303,13 +303,13 @@ async function handleWebhook(request: Request): Promise<Response> {
       });
       if (isEco) return new Response(JSON.stringify({ ok: true, ignored: "eco" }), { headers: { ...cors, "Content-Type": "application/json" } });
 
-      // Registrar mensagem do atendente humano
+      // Registra a mensagem (pode ser atendimento manual do dono pelo WhatsApp da loja), mas
+      // NUNCA pausa o bot automaticamente. A detecção de eco é falível e um falso positivo
+      // congelava a conversa (a Juliana ficava muda — já aconteceu 2x). Regra do negócio: ela
+      // atende 24h e nunca transfere; a pausa por humano só deve acontecer de forma EXPLÍCITA
+      // pelo painel, nunca como efeito colateral de um eco do WhatsApp.
       await supabaseAdmin.from("mensagens").insert({ conversa_id: conv.id, papel: "assistant", conteudo: text });
-      // Só pausar o bot se ainda não estava pausado (evita sobrescrever humano_em original)
-      if (!conv.precisa_humano) {
-        await supabaseAdmin.from("conversas").update({ precisa_humano: true, motivo_humano: "Atendimento humano manual", humano_em: new Date().toISOString() }).eq("id", conv.id);
-      }
-      return new Response(JSON.stringify({ ok: true, registrado: "humano" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: true, registrado: "humano_sem_pausar" }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     // IDEMPOTÊNCIA: verificar se o messageId já foi processado antes de iniciar qualquer lógica
