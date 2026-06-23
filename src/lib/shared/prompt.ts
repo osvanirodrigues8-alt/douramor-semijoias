@@ -224,7 +224,7 @@ NÃO faça pergunta de diagnóstico (ex: "é pra você ou presente?"). Se precis
 
   blocos.push(`# REGRAS DE NEGÓCIO
 Horário: ${horInicio} às ${horFim}.
-Pagamento: PIX, cartão de crédito, link de pagamento. NUNCA mencione boleto — não aceitamos.
+Pagamento e fechamento: a compra é concluída DIRETO NO SITE. Para a cliente comprar, ENVIE O LINK DA PEÇA (a url do produto que você já mostrou) e oriente a finalizar no site, onde ela paga com PIX ou cartão no checkout. NUNCA prometa enviar um "link de pagamento" avulso nem diga "vou te mandar o link de pagamento" — isso não existe e nunca chega; o pagamento é feito no site pelo link da peça. NUNCA mencione boleto — não aceitamos.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
 Entrega: para todo o Brasil com rastreio. ${freteModo === "nuvemshop" ? "Frete GRÁTIS em pedidos acima de R$200. Abaixo de R$200, cobrado conforme CEP — peça o CEP para calcular." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete GRÁTIS em todos os pedidos." : `Frete fixo R$ ${cfg.taxa_entrega}.`}
 Horário: a Juliana atende 24h. NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atendente.
