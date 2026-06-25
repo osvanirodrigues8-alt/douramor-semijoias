@@ -13,7 +13,7 @@ SELECT cron.schedule(
   $$
   SELECT net.http_post(
     url     := 'https://douramor-semijoias.lovable.app/api/public/follow-up-cron',
-    headers := '{"Content-Type": "application/json", "x-cron-secret": "99714da82624894d9edc7a87824ed5f682ce2c0f5028b76c0d9843062e58250b"}'::jsonb,
+    headers := '{"Content-Type": "application/json", "x-cron-secret": "__REDACTED__ (jobs desativados na migration 20260625000001; rotacionar CRON_SECRET)"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$
@@ -26,7 +26,7 @@ SELECT cron.schedule(
   $$
   SELECT net.http_post(
     url     := 'https://douramor-semijoias.lovable.app/api/public/pos-venda-cron',
-    headers := '{"Content-Type": "application/json", "x-cron-secret": "99714da82624894d9edc7a87824ed5f682ce2c0f5028b76c0d9843062e58250b"}'::jsonb,
+    headers := '{"Content-Type": "application/json", "x-cron-secret": "__REDACTED__ (jobs desativados na migration 20260625000001; rotacionar CRON_SECRET)"}'::jsonb,
     body    := '{}'::jsonb
   );
   $$
