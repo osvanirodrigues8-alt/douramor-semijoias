@@ -961,8 +961,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     // Enviar fotos de produtos mencionados
     const fotosEnviadasAnt: string[] = Array.isArray((conversa as any).fotos_enviadas) ? (conversa as any).fotos_enviadas : [];
     const enviadasSet = new Set(fotosEnviadasAnt);
-    // Produtos a fotografar: os da busca atual mencionados na resposta...
-    const candidatosFoto: any[] = produtos.filter((p) => p.url_foto && novosVistosIds.has(p.id));
+    // Produtos a fotografar: os mencionados na resposta (por nome OU link). NÃO exige url_foto do
+    // banco — ~metade do catálogo sincronizou SEM foto, então a foto vem AO VIVO da Nuvemshop.
+    const candidatosFoto: any[] = produtos.filter((p) => novosVistosIds.has(p.id));
     // ...MAIS qualquer peça LINKADA na resposta que não estava na busca atual — garante que a FOTO
     // sempre acompanha o link da peça (busca no banco pelo url_produto).
     const urlsNaResposta = (reply.match(/https?:\/\/[^\s)]+/g) ?? []).map((u) => u.replace(/[.,;)]+$/, ""));
