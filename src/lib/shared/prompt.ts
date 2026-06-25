@@ -369,7 +369,7 @@ COMPORTAMENTOS ADVERSARIAIS:
   }
 
   if (instrucaoFluxo && instrucaoFluxo.trim()) {
-    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (PRIORIDADE MÁXIMA — sobrepõe tudo abaixo)\n${instrucaoFluxo.trim()}`);
+    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (PRIORIDADE MÁXIMA — siga esta instrução acima de qualquer outra regra deste prompt)\n${instrucaoFluxo.trim()}`);
   }
 
   blocos.push(`# DIRETRIZES FINAIS
@@ -463,19 +463,23 @@ export function detectarIntencaoCompra(texto: string): boolean {
 }
 
 export function detectarTipoConversa(historico: { papel: string }[]): TipoConversa {
-  const idxPrimeiraUser = historico.findIndex((m) => m.papel === "user");
-  if (idxPrimeiraUser === -1) return "ativo";
-  const houveAssistantAntes = historico.slice(0, idxPrimeiraUser).some((m) => m.papel === "assistant");
-  return houveAssistantAntes ? "receptivo" : "ativo";
+  // Receptivo assim que a Juliana já respondeu alguma vez (conversa em andamento): continua
+  // naturalmente. Ativo só na primeira interação (ainda sem nenhuma resposta dela).
+  return historico.some((m) => m.papel === "assistant") ? "receptivo" : "ativo";
 }
 
 export function detectarTemperatura(historico: { papel: string; conteudo: string; criado_em?: string }[]): Temperatura {
   if (!historico.length) return "morno";
-  const ultUser = [...historico].reverse().find((m) => m.papel === "user");
+  const usuarios = historico.filter((m) => m.papel === "user");
+  const ultUser = usuarios[usuarios.length - 1];
   if (!ultUser) return "morno";
-  const t = (ultUser.conteudo ?? "").toLowerCase();
-  // "disponivel/disponível" removido de QUENTE — pergunta de disponibilidade é exploratória, não intenção de compra imediata
-  if (detectarIntencaoCompra(t) || /\b(quanto|preço|preco|link|comprar|pagar)\b/.test(t)) return "quente";
+  // "disponivel/disponível" fica fora de QUENTE — pergunta de disponibilidade é exploratória.
+  // Considera sinal de compra em QUALQUER uma das últimas 3 mensagens do cliente (não só a última).
+  const quente = usuarios.slice(-3).some((m) => {
+    const t = (m.conteudo ?? "").toLowerCase();
+    return detectarIntencaoCompra(t) || /\b(quanto|preço|preco|link|comprar|pagar)\b/.test(t);
+  });
+  if (quente) return "quente";
   const dt = ultUser.criado_em ? Date.now() - new Date(ultUser.criado_em).getTime() : 0;
   if (dt > 7 * 86400_000) return "inativo";
   if (dt > 2 * 86400_000) return "frio";

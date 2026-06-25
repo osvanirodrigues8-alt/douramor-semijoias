@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { buildSystemPrompt, normalizarMensagensIA, mascararPII, callAnthropicMessages } from "@/lib/shared/prompt";
+import { buildSystemPrompt, normalizarMensagensIA, mascararPII, callAnthropicMessages, detectarTipoConversa, detectarTemperatura } from "@/lib/shared/prompt";
 import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
 
 const cors = {
@@ -25,7 +25,7 @@ async function handleChat(request: Request): Promise<Response> {
     if (!cfg) throw new Error("Configurações não encontradas");
 
     const [{ data: produtos }, { data: cupons }, { data: faqs }] = await Promise.all([
-      supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id,nuvemshop_product_id").eq("status", "disponivel").not("categoria", "in", "(outro)").limit(40),
+      supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id,nuvemshop_product_id").eq("status", "disponivel").not("categoria", "in", "(outro,relogio,oculos)").limit(40),
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
@@ -116,6 +116,9 @@ async function handleChat(request: Request): Promise<Response> {
       cupons: cupons ?? [], faqs: faqs ?? [],
       canal: canal === "whatsapp" ? "whatsapp" : "site",
       cliente,
+      // Mesma inteligência do WhatsApp: tipo de conversa e temperatura (antes o site ficava sempre "ativo").
+      tipoConversa: detectarTipoConversa((hist ?? []) as any),
+      temperatura: detectarTemperatura((hist ?? []) as any),
       cotacaoFrete, freteFalhou, pediuFretemasSemCep,
     });
 

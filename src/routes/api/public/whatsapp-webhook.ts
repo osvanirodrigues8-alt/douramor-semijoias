@@ -17,7 +17,7 @@ import {
 } from "@/lib/shared/prompt";
 import crypto from "node:crypto";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
-import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, buscarProdutoNuvemshopLive, type OpcaoFrete } from "@/lib/shared/frete";
 import { detectarProblemasConversa, registrarFeedback } from "@/lib/shared/auditoria";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
@@ -514,8 +514,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     ));
     const categoriaPrincipal = categoriasPedidas[0] ?? null;
 
-    // Categorias que NÃO são semi joias — nunca aparecem no fallback
-    const categoriasExcluidas = ["outro"];
+    // Categorias que a IA NUNCA recomenda (não são o foco / regra de negócio):
+    // "outro" (não-semijoia) + relógios e óculos (a loja não vende pela Juliana).
+    const categoriasExcluidas = ["outro", "relogio", "oculos"];
 
     let produtos: any[] = [];
     const selectProdutos = "id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id";
@@ -605,7 +606,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Filtrar produtos sem URL e excluir categorias não-semi joias antes de passar ao prompt
     const produtosParaPrompt = produtos
-      .filter((p) => (p.url_produto || p.url_foto) && !["outro"].includes(p.categoria))
+      .filter((p) => (p.url_produto || p.url_foto) && !categoriasExcluidas.includes(p.categoria))
       .slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
@@ -613,8 +614,9 @@ async function handleWebhook(request: Request): Promise<Response> {
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
 
-    const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist);
-    if (!conversa.tipo_conversa) {
+    // Recalcula sempre (não congela): vira "receptivo" assim que a Juliana já respondeu.
+    const tipoConv = detectarTipoConversa(hist);
+    if (conversa.tipo_conversa !== tipoConv) {
       await supabaseAdmin.from("conversas").update({ tipo_conversa: tipoConv }).eq("id", conversa.id);
     }
     const temp = detectarTemperatura(hist);
@@ -706,7 +708,9 @@ async function handleWebhook(request: Request): Promise<Response> {
       podeOferecerCupom, descricaoMidia, instrucaoFluxo: instrucaoExtraFluxo,
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
       cepRecebidoAgora: !!cepNaMsg, categoriaPedida: categoriaPrincipal,
-      mensagemCitada: quotedText, urlCitada: quotedUrl, generoCliente: generoFiltro,
+      mensagemCitada: quotedText, urlCitada: quotedUrl,
+      // Gênero "grudento": usa o da mensagem atual ou, se não houver, o salvo no cliente.
+      generoCliente: generoFiltro ?? (cliente?.genero_interesse as any) ?? null,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
@@ -850,6 +854,10 @@ async function handleWebhook(request: Request): Promise<Response> {
         produtos_vistos: Array.from(novosVistosIds),
         produtos_interesse: Array.from(novosInteresseIds),
         temperatura_lead: temp,
+        // Preenche a ficha do cliente (antes esses campos nunca eram gravados → IA sem memória de perfil).
+        ...(generoFiltro ? { genero_interesse: generoFiltro } : {}),
+        ...(precoMax ? { budget_aproximado: precoMax } : {}),
+        ...(categoriaPrincipal && intencaoCompra ? { categoria_favorita: categoriaPrincipal } : {}),
         ...(podeOferecerCupom && new RegExp(`\\b${(cfgAg?.cupom_negociacao_codigo ?? "JULIANA10")}\\b`, "i").test(reply) ? { cupom_negociacao_oferecido_em: new Date().toISOString() } : {}),
       }).eq("id", cliente.id).then(({ error }) => { if (error) console.error("[clientes update]", error); }),
     ]);
@@ -895,20 +903,44 @@ async function handleWebhook(request: Request): Promise<Response> {
     const urlsProdutoFaltando = urlsNaResposta.filter((u) => /\/produtos\//i.test(u) && !urlsCobertas.has(u));
     if (urlsProdutoFaltando.length) {
       const { data: extras } = await supabaseAdmin.from("produtos")
-        .select("id,nome,preco,url_produto,url_foto")
+        .select("id,nome,preco,url_produto,url_foto,nuvemshop_product_id")
         .in("url_produto", urlsProdutoFaltando.slice(0, 3));
       for (const p of (extras ?? [])) if (p.url_foto && !candidatosFoto.some((c) => c.id === p.id)) candidatosFoto.push(p);
     }
     // Respeita o toggle "Enviar foto do catálogo" do painel (default: ligado).
     const enviarFotos = cfg?.enviar_foto_catalogo !== false;
     const produtosMencionados = (enviarFotos ? candidatosFoto.filter((p) => !enviadasSet.has(p.id)) : []).slice(0, 3);
-    for (const p of produtosMencionados) {
+
+    // FONTE MAIS CORRETA: ao mostrar o produto ao cliente, busca preço/estoque/foto/link AO VIVO
+    // na Nuvemshop. Se falhar, usa os dados sincronizados do banco (fallback — nunca fica sem card).
+    const connFoto = produtosMencionados.length ? await carregarConexaoNS(supabaseAdmin as any) : null;
+    const dadosLive = await Promise.all(
+      produtosMencionados.map((p) =>
+        connFoto && p.nuvemshop_product_id
+          ? buscarProdutoNuvemshopLive(connFoto, p.nuvemshop_product_id).catch(() => null)
+          : Promise.resolve(null),
+      ),
+    );
+    for (let i = 0; i < produtosMencionados.length; i++) {
+      const p = produtosMencionados[i];
+      const live = dadosLive[i];
+      // Esgotado na Nuvemshop (estoque definido e zerado) não é mostrado como disponível.
+      if (live && live.estoque != null && live.estoque <= 0) {
+        console.log("[foto] produto esgotado na Nuvemshop — não enviado:", p.id);
+        enviadasSet.add(p.id);
+        continue;
+      }
+      const nome = live?.nome ?? p.nome;
+      const preco = live?.preco ?? Number(p.preco);
+      const fotoUrl = live?.foto ?? p.url_foto;
+      const linkProd = live?.url ?? p.url_produto;
+      if (!fotoUrl) continue;
       await new Promise((r) => setTimeout(r, 300));
       try {
         const imgResp = await fetch("https://smv2-4.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
-          body: JSON.stringify({ number: numero, type: "image", url: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}${p.url_produto ? `\n${p.url_produto}` : ""}` }),
+          body: JSON.stringify({ number: numero, type: "image", url: fotoUrl, caption: `${nome} — R$ ${Number(preco).toFixed(2).replace(".", ",")}${linkProd ? `\n${linkProd}` : ""}` }),
           signal: AbortSignal.timeout(8000),
         });
         if (imgResp.ok) enviadasSet.add(p.id);
