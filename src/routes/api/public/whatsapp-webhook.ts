@@ -595,6 +595,11 @@ async function handleWebhook(request: Request): Promise<Response> {
       for (const p of extra ?? []) if (!seen.has(p.id)) produtos.push(p);
     }
 
+    // Só produtos REALMENTE da Nuvemshop (com product_id): têm foto/preço/estoque corretos e a foto
+    // pode ser buscada ao vivo. Remove produtos órfãos/legados (sem vínculo NS, sem foto, dados
+    // velhos) que poluíam o catálogo — causa de "diz que manda a foto e não manda" e dados errados.
+    produtos = produtos.filter((p) => p.nuvemshop_product_id);
+
     produtos.sort((a, b) => {
       const da = destaqueIds.has(a.id) ? 1 : 0;
       const db = destaqueIds.has(b.id) ? 1 : 0;

@@ -25,7 +25,7 @@ async function handleChat(request: Request): Promise<Response> {
     if (!cfg) throw new Error("Configurações não encontradas");
 
     const [{ data: produtos }, { data: cupons }, { data: faqs }] = await Promise.all([
-      supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id,nuvemshop_product_id").eq("status", "disponivel").not("categoria", "in", "(outro,relogio,oculos)").limit(40),
+      supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_variant_id,nuvemshop_product_id").eq("status", "disponivel").not("categoria", "in", "(outro,relogio,oculos)").not("nuvemshop_product_id", "is", null).limit(40),
       supabaseAdmin.from("cupons").select("codigo,tipo_desconto,valor_desconto,validade").eq("ativo", true),
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
