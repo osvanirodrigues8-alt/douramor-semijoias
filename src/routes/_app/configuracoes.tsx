@@ -26,7 +26,7 @@ function Configuracoes() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.from("configuracoes").select("*").limit(1).maybeSingle().then(async ({ data }) => {
+    supabase.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle().then(async ({ data }) => {
       if (data) { setCfg(data); return; }
       // Nenhum registro — cria padrão
       const { data: created } = await supabase.from("configuracoes").insert({}).select().maybeSingle();
@@ -41,9 +41,11 @@ function Configuracoes() {
   const save = async () => {
     setSaving(true);
     const { id, atualizado_em, ...rest } = cfg;
+    // Sempre bumpar atualizado_em: o bot lê a config mais recente (order by atualizado_em).
+    const payload = { ...rest, atualizado_em: new Date().toISOString() };
     const { error } = id
-      ? await supabase.from("configuracoes").update(rest).eq("id", id)
-      : await supabase.from("configuracoes").insert(rest);
+      ? await supabase.from("configuracoes").update(payload).eq("id", id)
+      : await supabase.from("configuracoes").insert(payload);
     setSaving(false);
     if (error) toast.error(error.message);
     else toast.success("Configurações salvas");

@@ -26,11 +26,11 @@ jobs:
       - name: Revisao IA (hora em hora)
         run: curl -fsS --max-time 60 "$BASE/api/public/revisao-ia-cron?secret=$SECRET" || echo "revisao falhou (ignorado)"
 
-      - name: Sync Nuvemshop (a cada 6h)
+      - name: Sync Nuvemshop (a cada 2h)
         run: |
           H=$(date -u +%H)
-          if [ $((10#$H % 6)) -eq 0 ]; then
+          if [ $((10#$H % 2)) -eq 0 ]; then
             curl -fsS --max-time 120 "$BASE/api/public/hooks/sync-nuvemshop-products?secret=$SECRET" || echo "sync falhou (ignorado)"
           else
-            echo "Pulando sync nesta hora ($H UTC) — roda a cada 6h."
+            echo "Pulando sync nesta hora ($H UTC) — roda a cada 2h."
           fi

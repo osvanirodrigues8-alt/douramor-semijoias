@@ -39,11 +39,15 @@ export function buildSystemPrompt(opts: {
   categoriaPedida?: string | null;
   mensagemCitada?: string | null;
   urlCitada?: string | null;
+  generoCliente?: "masculino" | "feminino" | "unissex" | null;
+  pedidoInfo?: string | null;
+  pedidoNaoEncontrado?: boolean;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada, generoCliente, pedidoInfo, pedidoNaoEncontrado } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
-  const tom = cfgAg?.tom ?? cfg?.tom_padrao ?? "informal";
+  // O painel edita configuracoes.tom_padrao — ele tem prioridade. cfgAg.tom é fallback legado.
+  const tom = cfg?.tom_padrao ?? cfgAg?.tom ?? "informal";
   const usoEmoji = cfgAg?.uso_emoji ?? cfg?.uso_emoji ?? "moderado";
   const tamanhoResp = cfg?.tamanho_resposta ?? "media";
   const assinatura = cfgAg?.assinatura ?? cfg?.assinatura ?? "";
@@ -51,9 +55,9 @@ export function buildSystemPrompt(opts: {
   const freteModoCfg = cfgAg?.frete_modo ?? "nuvemshop";
   const freteModo = freteModoCfg;
   const contextoLojaRaw = cfgAg?.contexto_loja ?? cfg?.descricao_loja ?? "";
-  const contextoLoja = freteModoCfg === "nuvemshop"
-    ? String(contextoLojaRaw).replace(/frete\s+gr[aá]tis[^,.]*/gi, "frete calculado por CEP")
-    : contextoLojaRaw;
+  // Não reescrever "frete grátis": a regra oficial é frete GRÁTIS acima de R$200
+  // (cobrado abaixo), então a menção a frete grátis na descrição da loja é legítima.
+  const contextoLoja = contextoLojaRaw;
   const diferenciais = cfg?.diferenciais_loja ?? "";
   const personalidade = cfg?.personalidade ?? "";
   const promptExtra = cfgAg?.prompt_extra ?? "";
@@ -80,6 +84,13 @@ export function buildSystemPrompt(opts: {
     longa: "Pode dar respostas um pouco mais elaboradas, mas ainda quebrando em parágrafos curtos.",
   }[tamanhoResp as "curta" | "media" | "longa"] ?? "Respostas curtas a médias: máximo 3 parágrafos curtos.";
 
+  const tomInstr = {
+    formal: "Tom FORMAL e profissional: trate por \"você\" (ou \"senhor(a)\" se a pessoa preferir), seja cordial, clara e objetiva. Evite gírias, abreviações de internet e risadas escritas (nada de \"kkk\", \"haha\", \"rs\"). Mantenha a simpatia, mas com postura de atendimento sério e respeitoso.",
+    semiformal: "Tom SEMIFORMAL: simpática e acessível, porém comedida. Pouca gíria, sem exageros.",
+    descontraido: "Tom DESCONTRAÍDO: leve e natural como uma conversa de WhatsApp, pode usar expressões informais com bom senso.",
+    informal: "Tom INFORMAL: leve e natural como uma conversa de WhatsApp, pode usar expressões informais com bom senso.",
+  }[tom as "formal" | "semiformal" | "descontraido" | "informal"] ?? "";
+
   const horInicio = String(cfgAg?.horario_inicio ?? cfg?.horario_atendimento_inicio ?? "08:00").slice(0, 5);
   const horFim = String(cfgAg?.horario_fim ?? cfg?.horario_atendimento_fim ?? "22:00").slice(0, 5);
 
@@ -97,7 +108,7 @@ Se perguntarem diretamente ("você é IA?", "é robô?", "é automático?", "é 
 - "Haha, IA? Que nada! Sou humana sim 😄 Trabalho aqui na Douramor há um tempinho já."
 - "Imagina! Sou a ${nomeAgente} mesmo, atendo aqui na Douramor. Me conta, posso te ajudar com o quê?"
 - "Kkkk não, sou pessoa de verdade viu! Tô aqui pra te ajudar a achar a peça certa."
-Não entre em debate — diga uma vez com naturalidade e siga a conversa.
+Não entre em debate — diga uma vez com naturalidade e siga a conversa. (Adapte o estilo dessas respostas ao tom configurado: se o tom for formal, responda sem risadas nem gírias, de forma cordial e firme.)
 
 LOJA FÍSICA: A Douramor tem loja física em Matozinhos-MG: R. Montes Claros, 700 — Loja A, Bairro Bom Jesus 02. Se perguntarem onde fica, pode informar o endereço. Mas a maioria das vendas é pelo WhatsApp com entrega para todo o Brasil.
 
@@ -114,7 +125,7 @@ PROIBIÇÕES ABSOLUTAS — NUNCA faça isso:
 
   blocos.push(`# JEITO DE FALAR (linguagem natural humana)
 - Tom: ${tom}. Idioma: pt-BR brasileiro.
-- ${tamanhoInstr}
+${tomInstr ? `- ${tomInstr}\n` : ""}- ${tamanhoInstr}
 - ${emojiInstr}
 - Use expressões NATURAIS de quem está digitando no WhatsApp
 - Quebra a resposta em até 3 parágrafos CURTOS — nunca um bloco gigante.
@@ -172,6 +183,7 @@ Seja INVESTIGATIVA antes de oferecer. Construa rapport ANTES de mostrar produto 
       cliente.budget_aproximado ? `Budget aproximado: R$ ${cliente.budget_aproximado}` : "",
       cliente.preferencias ? `Preferências: ${cliente.preferencias}` : "",
       temperatura ? `Temperatura do lead: ${temperatura.toUpperCase()}` : "",
+      generoCliente && generoCliente !== "unissex" ? `Gênero identificado: ${generoCliente}. Adapte o tratamento e evite linguagem do gênero oposto.` : "",
       cliente.cupom_negociacao_usado ? "ATENCAO: Cliente JÁ USOU o cupom — NÃO oferecer de novo." : "",
     ].filter(Boolean);
     blocos.push(`# FICHA DA CLIENTE\n${fichaLinhas.join("\n")}`);
@@ -225,14 +237,67 @@ Se a conversa já estava perto do fechamento, vale perguntar com leveza se ela c
   }
 
   blocos.push(`# REGRAS DE NEGÓCIO
-Horário: ${horInicio} às ${horFim}.
+Atendimento: você atende 24h, todos os dias.
 Pagamento e fechamento: a compra é concluída DIRETO NO SITE. Para a cliente comprar, ENVIE O LINK DA PEÇA (a url do produto que você já mostrou) e oriente a finalizar no site, onde ela paga com PIX ou cartão no checkout. NUNCA prometa enviar um "link de pagamento" avulso nem diga "vou te mandar o link de pagamento" — isso não existe e nunca chega; o pagamento é feito no site pelo link da peça. NUNCA mencione boleto — não aceitamos.
 ${cfg?.parcelamento_ativo ? `Parcelamento em até ${cfg.max_parcelas}x sem juros acima de R$ ${cfg.valor_minimo_parcelamento}.` : ""}
 Entrega: para todo o Brasil com rastreio. ${freteModo === "nuvemshop" ? "Frete GRÁTIS em pedidos acima de R$200. Abaixo de R$200, cobrado conforme CEP — peça o CEP para calcular." : Number(cfg?.taxa_entrega ?? 0) === 0 ? "Frete GRÁTIS em todos os pedidos." : `Frete fixo R$ ${cfg.taxa_entrega}.`}
-Horário: a Juliana atende 24h. NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atendente.
+NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atendente — você atende sozinha, a qualquer hora.
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
+
+  // ── Conhecimento operacional (responda com segurança, sem inventar) ──────────
+  blocos.push(`# POLÍTICAS DA LOJA (responda com segurança, sem inventar)
+- Postagem: o pedido é postado em até 1 dia útil após a confirmação do pagamento.
+- Prazo de entrega: depende do CEP (Correios) — o prazo exato aparece no checkout ao informar o CEP.
+- Nota fiscal: emitimos nota fiscal em TODA compra.
+- Troca/devolução: até 7 dias após receber (direito de arrependimento) + garantia de 1 ano contra defeito de fabricação.
+- Embrulho para presente: NÃO temos embrulho de presente (vai na embalagem padrão) — não prometa embrulho especial. Você pode enviar para o endereço que o cliente escolher.
+- Pagamento: PIX (à vista), cartão de crédito (até 12x sem juros) e cartão de débito. NÃO aceitamos boleto. A compra é finalizada pelo link da peça no site (checkout).
+- Qualidade: as peças são banhadas a ouro 18k e ANTIALÉRGICAS (não causam alergia) — ótimo argumento quando perguntarem sobre alergia/níquel, sensibilidade ou durabilidade.`);
+
+  blocos.push(`# TAMANHOS E MEDIDAS
+- Anel: o tamanho/aro disponível está nas variações da peça na loja (o link do produto já mostra as opções). Se a cliente não souber o aro, oriente a medir a circunferência do dedo com uma fitinha/barbante e ajude a escolher.
+- Corrente/colar: o tamanho (em cm) normalmente vem na descrição da peça — confira o anúncio do produto.
+- Pulseira: não tem tamanho específico (modelo único/ajustável).`);
+
+  blocos.push(`# CONFIANÇA (quando desconfiarem: "é golpe?", "tem CNPJ?")
+A Douramor é uma empresa registrada e com 2 anos de mercado — passe segurança com naturalidade, nunca soe defensiva:
+- CNPJ: 61.295.526/0001-30.
+- Loja física real em Matozinhos-MG.
+- Instagram oficial: @douramorsemijoias (também no Threads: douramorsemijoias). Site oficial: www.douramor.com.br.
+- Avaliação 5,0 estrelas no Google (perfil "Douramor Semijoias") com clientes satisfeitos.
+- O pagamento é feito no site oficial, com checkout seguro (PIX/cartão).
+- Pode indicar o nosso Instagram, a nota no Google e os depoimentos de clientes como prova de que somos reais e confiáveis.`);
+
+  blocos.push(`# REVENDA (CONSIGNADO) — pré-qualificação
+Trabalhamos com revenda 100% CONSIGNADA (NÃO vendemos atacado no momento — se pedirem atacado, explique isso com gentileza).
+Como funciona (apresente de forma atraente): a revendedora começa com cerca de 30 peças que ELA MESMA escolhe, SEM precisar comprar estoque; vende e faz o acerto a cada 45 dias, pagando só o que vendeu e devolvendo o que não vendeu (em bom estado). Não há venda mínima obrigatória. O ganho é de 20% a 40% conforme o valor das vendas, com bônus ao bater metas.
+Quando alguém demonstrar interesse em REVENDER, faça uma PRÉ-QUALIFICAÇÃO simpática, UMA pergunta por vez, descobrindo:
+1) Nome completo e CPF (precisamos de nome sem restrição — como é consignado, é baseado em confiança; peça o CPF com naturalidade, explicando que é para a análise de cadastro).
+2) Experiência com vendas.
+3) Cidade/região onde pretende revender.
+4) Disponibilidade e dedicação.
+5) Se já revende algo ou já tem clientela.
+6) Como pretende vender (Instagram, presencial, etc.).
+Ao concluir, diga que o perfil será analisado pelo setor responsável, que entra em contato para dar sequência — NÃO prometa aprovação. Finalize essa mensagem com a tag [REVENDA] no final (o sistema usa internamente; NUNCA comente sobre ela).`);
+
+  blocos.push(`# SITUAÇÕES DE PÓS-VENDA E ATENDIMENTO (resolva você mesma, com naturalidade)
+- DEFEITO: se a cliente disser que a peça veio com defeito, acolha, peça uma FOTO ou VÍDEO do problema e garanta a TROCA pela garantia de 1 ano, SEM custo pra ela. Tranquilize: defeito de fabricação é coberto.
+- CANCELAMENTO (caso a caso): peça o número do pedido e o motivo e verifique o status. Se o pedido AINDA NÃO foi postado, diga que vai providenciar o cancelamento/estorno. Se já foi enviado/entregue, oriente o caminho da devolução (até 7 dias após receber). Não negue de cara nem prometa o que não cabe.
+- PEÇA ESGOTADA / SEM ESTOQUE: o estoque do site (Nuvemshop) está sempre atualizado — se uma peça não aparece disponível, é porque saiu. Nesse caso, ofereça uma peça PARECIDA do catálogo atual. NÃO prometa "aviso quando voltar" nem encomenda (não temos esse processo).
+- RESERVA: não reservamos peças — quem garante é quem fecha primeiro. Use isso como urgência real e gentil ("não consigo segurar a peça, mas te ajudo a fechar rapidinho pra você não perder").
+- CUIDADOS COM A PEÇA: dura mais evitando água, perfume, suor e produtos químicos — oriente a tirar a peça pra dormir, tomar banho, ir à academia ou à piscina. Bem cuidada dura bastante, e nossas peças são antialérgicas.
+- QUANDO NÃO SOUBER: seja honesta, NUNCA invente. Diga que vai confirmar o detalhe e peça mais informações pra ajudar melhor. Resolva com o que sabe — nunca diga que vai passar pra outra pessoa.`);
+
+  if (pedidoInfo) {
+    blocos.push(`# PEDIDO DO CLIENTE (status real do sistema — use estes dados)
+${pedidoInfo}
+Informe o status com clareza e tranquilidade. Se houver código/link de rastreio, passe para a cliente. Não invente datas que não estejam aqui.`);
+  } else if (pedidoNaoEncontrado) {
+    blocos.push(`# PEDIDO — NÃO LOCALIZADO
+Não encontrei um pedido vinculado a este contato. Peça com gentileza o NÚMERO do pedido (ou o e-mail/CPF usado na compra) para você localizar. NUNCA invente um status.`);
+  }
 
   // Controle interno de follow-up: a IA sinaliza eventos com tags que o sistema remove antes de enviar.
   blocos.push(`# CONTROLE INTERNO DE FOLLOW-UP (tags invisíveis)
@@ -251,7 +316,10 @@ Não invente esses eventos: só marque quando a cliente realmente disser. Uma me
     const obrigatorio = cepRecebidoAgora
       ? `\nATENÇÃO: a cliente acabou de informar o CEP. OBRIGATÓRIO confirmar o frete nesta resposta PRIMEIRO.\nESSES SÃO OS VALORES REAIS E DEFINITIVOS DO SISTEMA — não questione, não mude, não invente outros valores. Se a cliente questionar o valor calculado, use exatamente esta resposta: "O sistema confirmou esse valor pelo seu CEP. Se quiser conferir, o checkout da loja também vai mostrar o mesmo — é automático e não depende de mim alterar." Nunca recalcule nem mencione outros valores possíveis.`
       : `\nESSES SÃO OS VALORES REAIS E DEFINITIVOS DO SISTEMA — apresente naturalmente. NUNCA invente outros valores mesmo se a cliente questionar. Se a cliente questionar o valor calculado, use exatamente esta resposta: "O sistema confirmou esse valor pelo seu CEP. Se quiser conferir, o checkout da loja também vai mostrar o mesmo — é automático e não depende de mim alterar." Nunca recalcule nem mencione outros valores possíveis.`;
-    blocos.push(`# COTAÇÃO DE FRETE OFICIAL — CEP ${cotacaoFrete.cep} (VALOR DEFINITIVO E IMUTÁVEL DO SISTEMA)\n${linhas}${obrigatorio}`);
+    const notaGratis = freteModo === "nuvemshop"
+      ? `\nIMPORTANTE: pedidos a partir de R$200 têm FRETE GRÁTIS para todo o Brasil. O valor acima vale para pedidos ABAIXO de R$200 — se a cliente fechar R$200 ou mais, o frete sai de graça. Use isso como incentivo de fechamento quando fizer sentido.`
+      : "";
+    blocos.push(`# COTAÇÃO DE FRETE OFICIAL — CEP ${cotacaoFrete.cep} (VALOR DEFINITIVO E IMUTÁVEL DO SISTEMA)\n${linhas}${obrigatorio}${notaGratis}`);
   } else if (cotacaoFrete && (!cotacaoFrete.opcoes || cotacaoFrete.opcoes.length === 0)) {
     blocos.push(`# FRETE — CEP INFORMADO MAS SEM OPÇÕES\nO sistema não retornou opções de frete para o CEP ${cotacaoFrete.cep}. Diga: "Nosso sistema não conseguiu calcular o frete para esse CEP agora — mas você pode conferir diretamente no site no momento do checkout, ou me passa outro CEP se preferir." NUNCA invente um valor de frete.`);
   } else if (pediuFretemasSemCep) {
@@ -312,9 +380,8 @@ REGRAS DO CATÁLOGO:
 - Se a cliente pedir uma categoria ou modelo específico e NÃO existir nenhum produto desse tipo no catálogo acima: diga honestamente "Esse modelo a gente não tem no momento" e sugira a categoria mais parecida que existe no catálogo. NUNCA invente um produto que não está listado.
 - NUNCA apresente produto com estoque 0 como disponível.`);
 
-  if (cupons?.length) {
-    blocos.push(`# CUPONS PÚBLICOS ATIVOS\n${cupons.map((c) => `- ${c.codigo}: ${c.tipo_desconto === "percentual" ? c.valor_desconto + "%" : "R$ " + c.valor_desconto}${c.validade ? ` (até ${c.validade})` : ""}`).join("\n")}`);
-  }
+  // Cupom é oferecido APENAS como último recurso — quando a Juliana percebe risco real de
+  // perder a venda — via o fluxo de cupom de negociação abaixo. NUNCA listar cupons proativamente.
 
   const cupomCodigo = cfgAg?.cupom_negociacao_codigo ?? "JULIANA10";
   const cupomPct = Number(cfgAg?.cupom_negociacao_percentual ?? 10);
@@ -356,7 +423,7 @@ COMPORTAMENTOS ADVERSARIAIS:
   }
 
   if (instrucaoFluxo && instrucaoFluxo.trim()) {
-    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (PRIORIDADE MÁXIMA — sobrepõe tudo abaixo)\n${instrucaoFluxo.trim()}`);
+    blocos.push(`# INSTRUÇÃO ATIVA DO FLUXO (PRIORIDADE MÁXIMA — siga esta instrução acima de qualquer outra regra deste prompt)\n${instrucaoFluxo.trim()}`);
   }
 
   blocos.push(`# DIRETRIZES FINAIS
@@ -449,20 +516,36 @@ export function detectarIntencaoCompra(texto: string): boolean {
   return /\b(quero|vou\s+levar|vou\s+comprar|fechar\s+pedido|como\s+(pago|fa[çc]o\s+(o\s+)?pedido|compr)|aceita\s+(cart[aã]o|pix|boleto)|finalizar|comprar\s+agora|pode\s+separar)\b/.test(t);
 }
 
+// Detecta que o cliente está perguntando sobre um pedido já feito (rastreamento/status).
+export function detectaIntencaoPedido(texto: string): boolean {
+  const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /(cad[e]|onde).{0,15}(pedido|encomenda|compra)|rastrei|codigo de rastreio|meu pedido|minha encomenda|status do (meu )?pedido|ja (foi )?(enviad|postad|despachad)|previsao de entrega|quando.{0,12}chega|nao chegou|ainda nao (chegou|recebi)/.test(t);
+}
+
+// Extrai um número de pedido do texto, quando o cliente o informa (ex.: "pedido 1234", "#1234").
+export function extrairNumeroPedido(texto: string): number | null {
+  const m = texto.match(/pedido\s*(?:n[uº°o]?\.?\s*)?#?\s*(\d{1,8})/i) ?? texto.match(/#\s?(\d{2,8})/);
+  return m ? Number(m[1]) : null;
+}
+
 export function detectarTipoConversa(historico: { papel: string }[]): TipoConversa {
-  const idxPrimeiraUser = historico.findIndex((m) => m.papel === "user");
-  if (idxPrimeiraUser === -1) return "ativo";
-  const houveAssistantAntes = historico.slice(0, idxPrimeiraUser).some((m) => m.papel === "assistant");
-  return houveAssistantAntes ? "receptivo" : "ativo";
+  // Receptivo assim que a Juliana já respondeu alguma vez (conversa em andamento): continua
+  // naturalmente. Ativo só na primeira interação (ainda sem nenhuma resposta dela).
+  return historico.some((m) => m.papel === "assistant") ? "receptivo" : "ativo";
 }
 
 export function detectarTemperatura(historico: { papel: string; conteudo: string; criado_em?: string }[]): Temperatura {
   if (!historico.length) return "morno";
-  const ultUser = [...historico].reverse().find((m) => m.papel === "user");
+  const usuarios = historico.filter((m) => m.papel === "user");
+  const ultUser = usuarios[usuarios.length - 1];
   if (!ultUser) return "morno";
-  const t = (ultUser.conteudo ?? "").toLowerCase();
-  // "disponivel/disponível" removido de QUENTE — pergunta de disponibilidade é exploratória, não intenção de compra imediata
-  if (detectarIntencaoCompra(t) || /\b(quanto|preço|preco|link|comprar|pagar)\b/.test(t)) return "quente";
+  // "disponivel/disponível" fica fora de QUENTE — pergunta de disponibilidade é exploratória.
+  // Considera sinal de compra em QUALQUER uma das últimas 3 mensagens do cliente (não só a última).
+  const quente = usuarios.slice(-3).some((m) => {
+    const t = (m.conteudo ?? "").toLowerCase();
+    return detectarIntencaoCompra(t) || /\b(quanto|preço|preco|link|comprar|pagar)\b/.test(t);
+  });
+  if (quente) return "quente";
   const dt = ultUser.criado_em ? Date.now() - new Date(ultUser.criado_em).getTime() : 0;
   if (dt > 7 * 86400_000) return "inativo";
   if (dt > 2 * 86400_000) return "frio";
@@ -801,5 +884,72 @@ export function extrairKeywordsDeDescricao(desc: string): { keywords: string[]; 
     if (t.includes(w)) kw.add(w.normalize("NFD").replace(/[̀-ͯ]/g, ""));
   }
   return { keywords: Array.from(kw), categoria: cat };
+}
+
+// ============ Chamada à IA (normalização + fallback de modelo) ============
+
+export const MODELO_FALLBACK_IA = "claude-haiku-4-5-20251001";
+
+// Mascarar PII (CPF, cartão) antes de enviar à IA.
+export function mascararPII(texto: string): string {
+  return String(texto ?? "")
+    .replace(/\b\d{3}[\.\s]?\d{3}[\.\s]?\d{3}[-\.\s]?\d{2}\b/g, "[CPF ocultado]")
+    .replace(/\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/g, "[cartão ocultado]");
+}
+
+// Normaliza o array de mensagens para o formato exigido pela Anthropic:
+// 1) remove mensagens vazias; 2) descarta 'assistant' iniciais (a 1ª DEVE ser 'user',
+// senão a API retorna 400); 3) mescla mensagens consecutivas do mesmo papel
+// (papéis repetidos também causam 400). Sem isso, follow-up e chat caíam em 400.
+export function normalizarMensagensIA(
+  msgs: { role: "user" | "assistant"; content: string }[],
+): { role: "user" | "assistant"; content: string }[] {
+  const arr = msgs
+    .map((m) => ({ role: m.role, content: String(m.content ?? "").trim() }))
+    .filter((m) => m.content.length > 0);
+  while (arr.length && arr[0].role === "assistant") arr.shift();
+  const out: { role: "user" | "assistant"; content: string }[] = [];
+  for (const m of arr) {
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content += "\n" + m.content;
+    else out.push({ ...m });
+  }
+  return out;
+}
+
+// Chama a Anthropic com temperatura e FALLBACK automático de modelo:
+// se o modelo configurado falhar (400/403/404 — ex.: Sonnet/Opus indisponível nesta
+// conta, ou id legado não-Anthropic), tenta de novo no Haiku para o bot nunca ficar mudo.
+export async function callAnthropicMessages(params: {
+  apiKey: string;
+  model?: string | null;
+  system?: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  maxTokens?: number;
+  temperature?: number;
+  signal?: AbortSignal;
+}): Promise<Response> {
+  const modeloConfig = params.model && /^claude-/.test(params.model) ? params.model : MODELO_FALLBACK_IA;
+  const montarBody = (model: string) =>
+    JSON.stringify({
+      model,
+      max_tokens: params.maxTokens ?? 1024,
+      temperature: params.temperature ?? 0.4,
+      ...(params.system ? { system: params.system } : {}),
+      messages: params.messages,
+    });
+  const enviar = (model: string) =>
+    fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": params.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
+      body: montarBody(model),
+      signal: params.signal,
+    });
+  let resp = await enviar(modeloConfig);
+  if (!resp.ok && modeloConfig !== MODELO_FALLBACK_IA && [400, 403, 404].includes(resp.status)) {
+    console.warn(`[anthropic] modelo ${modeloConfig} falhou (${resp.status}) — caindo para ${MODELO_FALLBACK_IA}`);
+    resp = await enviar(MODELO_FALLBACK_IA);
+  }
+  return resp;
 }
 

@@ -11,7 +11,8 @@ export function extrairCep(texto: string): string | null {
 
 export function detectaIntencaoFrete(texto: string): boolean {
   const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  return /(frete|entrega|envio|chega(r)?(\s+em)?|prazo|quanto.*(?:mandar|enviar|frete|entreg)|sedex|pac\b|correios|transportadora|cep|demora\s+(pra|para)\s+chegar|dias\s+(uteis|pra))/.test(t);
+  // "prazo" sozinho dava falso-positivo ("prazo da garantia/troca") — exige contexto de entrega.
+  return /(frete|entrega|envio|chega(r)?(\s+em)?|prazo\s+(de\s+)?(entrega|envio)|prazo\s+(pra|para)\s+chegar|quanto.*(?:mandar|enviar|frete|entreg)|sedex|pac\b|correios|transportadora|cep|demora\s+(pra|para)\s+chegar|dias\s+(uteis|pra))/.test(t);
 }
 
 type Conn = { store_id: string; access_token: string; dominio_loja?: string | null };
@@ -251,6 +252,72 @@ export async function calcularFreteNuvemshop(params: {
       ? "Tempo limite excedido ao consultar frete."
       : "Erro ao consultar frete. Tente novamente.";
     return { ok: false, erro: msg };
+  }
+}
+
+// Busca um produto AO VIVO na Nuvemshop (fonte mais correta de preço/estoque/foto/link)
+// para o momento de mostrar o produto ao cliente. Retorna null se falhar — o chamador
+// usa os dados sincronizados do banco como fallback (cliente nunca fica sem o card).
+function pickLangNS(v: unknown): string | null {
+  if (!v) return null;
+  if (typeof v === "string") return v;
+  if (typeof v === "object") {
+    const o = v as Record<string, string | undefined>;
+    return o.pt ?? o.es ?? o.en ?? Object.values(o)[0] ?? null;
+  }
+  return null;
+}
+
+export async function buscarProdutoNuvemshopLive(
+  conn: Conn,
+  productId: string | number,
+): Promise<{ nome: string | null; preco: number | null; url: string | null; foto: string | null; estoque: number | null } | null> {
+  try {
+    const res = await fetchComTimeout(
+      `${NS_API}/${conn.store_id}/products/${productId}`,
+      { headers: { Authentication: `bearer ${conn.access_token}`, "User-Agent": UA, "Content-Type": "application/json" } },
+      7000,
+    );
+    if (!res.ok) return null;
+    const p: any = await res.json().catch(() => null);
+    if (!p) return null;
+    const variant = p.variants?.[0];
+    return {
+      nome: pickLangNS(p.name),
+      preco: variant?.price != null ? Number(variant.price) : null,
+      url: p.permalink ?? p.canonical_url ?? null,
+      foto: p.images?.[0]?.src ?? null,
+      estoque: variant?.stock == null ? null : Number(variant.stock),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Busca um PEDIDO ao vivo na Nuvemshop (fonte mais correta de status de envio e rastreio).
+export async function buscarPedidoNuvemshopLive(
+  conn: Conn,
+  orderId: string | number,
+): Promise<{ numero: number | null; status: string | null; pagamento: string | null; envio: string | null; rastreioCodigo: string | null; rastreioUrl: string | null } | null> {
+  try {
+    const res = await fetchComTimeout(
+      `${NS_API}/${conn.store_id}/orders/${orderId}`,
+      { headers: { Authentication: `bearer ${conn.access_token}`, "User-Agent": UA, "Content-Type": "application/json" } },
+      7000,
+    );
+    if (!res.ok) return null;
+    const o: any = await res.json().catch(() => null);
+    if (!o) return null;
+    return {
+      numero: o.number ?? null,
+      status: o.status ?? null,
+      pagamento: o.payment_status ?? null,
+      envio: o.shipping_status ?? o.fulfillment_status ?? null,
+      rastreioCodigo: o.shipping_tracking_number ?? null,
+      rastreioUrl: o.shipping_tracking_url ?? null,
+    };
+  } catch {
+    return null;
   }
 }
 

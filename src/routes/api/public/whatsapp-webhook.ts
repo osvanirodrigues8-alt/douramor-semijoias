@@ -12,10 +12,14 @@ import {
   transcreverAudioBase64,
   descreverImagem,
   extrairKeywordsDeDescricao,
+  normalizarMensagensIA,
+  callAnthropicMessages,
+  detectaIntencaoPedido,
+  extrairNumeroPedido,
 } from "@/lib/shared/prompt";
 import crypto from "node:crypto";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
-import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, type OpcaoFrete } from "@/lib/shared/frete";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, buscarProdutoNuvemshopLive, buscarPedidoNuvemshopLive, type OpcaoFrete } from "@/lib/shared/frete";
 import { detectarProblemasConversa, registrarFeedback } from "@/lib/shared/auditoria";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
@@ -512,8 +516,9 @@ async function handleWebhook(request: Request): Promise<Response> {
     ));
     const categoriaPrincipal = categoriasPedidas[0] ?? null;
 
-    // Categorias que NÃO são semi joias — nunca aparecem no fallback
-    const categoriasExcluidas = ["outro"];
+    // Categorias que a IA NUNCA recomenda (não são o foco / regra de negócio):
+    // "outro" (não-semijoia) + relógios e óculos (a loja não vende pela Juliana).
+    const categoriasExcluidas = ["outro", "relogio", "oculos"];
 
     let produtos: any[] = [];
     const selectProdutos = "id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto,url_foto,nuvemshop_product_id,nuvemshop_variant_id";
@@ -603,7 +608,7 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     // Filtrar produtos sem URL e excluir categorias não-semi joias antes de passar ao prompt
     const produtosParaPrompt = produtos
-      .filter((p) => (p.url_produto || p.url_foto) && !["outro"].includes(p.categoria))
+      .filter((p) => (p.url_produto || p.url_foto) && !categoriasExcluidas.includes(p.categoria))
       .slice(0, 30);
 
     const [{ data: cupons }, { data: faqs }] = await Promise.all([
@@ -611,8 +616,9 @@ async function handleWebhook(request: Request): Promise<Response> {
       supabaseAdmin.from("faqs").select("pergunta,resposta,categoria,ordem").eq("ativo", true).order("ordem", { ascending: true }),
     ]);
 
-    const tipoConv = (conversa.tipo_conversa as "ativo" | "receptivo" | undefined) ?? detectarTipoConversa(hist);
-    if (!conversa.tipo_conversa) {
+    // Recalcula sempre (não congela): vira "receptivo" assim que a Juliana já respondeu.
+    const tipoConv = detectarTipoConversa(hist);
+    if (conversa.tipo_conversa !== tipoConv) {
       await supabaseAdmin.from("conversas").update({ tipo_conversa: tipoConv }).eq("id", conversa.id);
     }
     const temp = detectarTemperatura(hist);
@@ -698,6 +704,49 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? TENTATIVAS_ESCALAR_DEFAULT);
 
+    // ─── Rastreamento de pedido (autonomia no pós-venda) ───────────────────────
+    // "Cadê meu pedido?" → consulta o sistema; status de envio/rastreio vem da Nuvemshop (mais correto).
+    let pedidoInfo: string | null = null;
+    let pedidoNaoEncontrado = false;
+    if (detectaIntencaoPedido(text)) {
+      const numPedido = extrairNumeroPedido(text);
+      const selPedido = "numero,status,valor_total,criado_em,nuvemshop_order_id,cliente_id";
+      let pedido: any = null;
+      if (numPedido) {
+        const { data } = await supabaseAdmin.from("pedidos").select(selPedido).eq("numero", numPedido).maybeSingle();
+        pedido = data ?? null;
+      }
+      if (!pedido && cliente?.id) {
+        const { data } = await supabaseAdmin.from("pedidos").select(selPedido)
+          .eq("cliente_id", cliente.id).order("criado_em", { ascending: false }).limit(1).maybeSingle();
+        pedido = data ?? null;
+      }
+      if (pedido) {
+        const statusPt: Record<string, string> = {
+          novo: "recebido", confirmado: "confirmado (pagamento aprovado)",
+          em_preparo: "em preparo/separação", enviado: "enviado, a caminho",
+          entregue: "entregue", cancelado: "cancelado",
+        };
+        let linha = `Pedido #${pedido.numero} — status: ${statusPt[pedido.status as string] ?? pedido.status}`;
+        const dataPed = pedido.criado_em ? new Date(pedido.criado_em).toLocaleDateString("pt-BR") : null;
+        if (dataPed) linha += ` — feito em ${dataPed}`;
+        if (pedido.nuvemshop_order_id) {
+          const conn = await carregarConexaoNS(supabaseAdmin as any);
+          if (conn) {
+            const ns = await buscarPedidoNuvemshopLive(conn, pedido.nuvemshop_order_id).catch(() => null);
+            if (ns) {
+              if (ns.envio) linha += ` — envio (Nuvemshop): ${ns.envio}`;
+              if (ns.rastreioCodigo) linha += ` — código de rastreio: ${ns.rastreioCodigo}`;
+              if (ns.rastreioUrl) linha += ` — rastrear: ${ns.rastreioUrl}`;
+            }
+          }
+        }
+        pedidoInfo = linha;
+      } else {
+        pedidoNaoEncontrado = true;
+      }
+    }
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
@@ -705,6 +754,9 @@ async function handleWebhook(request: Request): Promise<Response> {
       cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar: tentativasMax,
       cepRecebidoAgora: !!cepNaMsg, categoriaPedida: categoriaPrincipal,
       mensagemCitada: quotedText, urlCitada: quotedUrl,
+      // Gênero "grudento": usa o da mensagem atual ou, se não houver, o salvo no cliente.
+      generoCliente: generoFiltro ?? (cliente?.genero_interesse as any) ?? null,
+      pedidoInfo, pedidoNaoEncontrado,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
@@ -725,26 +777,22 @@ async function handleWebhook(request: Request): Promise<Response> {
       { role: "user" as const, content: mascararPII(text) },
     ];
 
-    // Mesclar mensagens consecutivas do mesmo papel (Anthropic rejeita 400 se houver)
-    // Pode ocorrer quando o Stevo retenta e insere msg duplicada no banco
-    const messagesParaIA = rawMessages.reduce((acc: { role: "user" | "assistant"; content: string }[], m) => {
-      if (acc.length > 0 && acc[acc.length - 1].role === m.role) {
-        acc[acc.length - 1].content += "\n" + m.content;
-      } else {
-        acc.push({ role: m.role, content: m.content });
-      }
-      return acc;
-    }, []);
+    // Normaliza para o formato da Anthropic: mescla papéis consecutivos E descarta
+    // 'assistant' inicial (a API exige começar com 'user', senão 400 → resposta genérica).
+    const messagesParaIA = normalizarMensagensIA(rawMessages);
 
     // Chamar Anthropic com timeout de 25s
     const ac = new AbortController();
     const aiTimer = setTimeout(() => ac.abort(), 25000);
     let aiResp: Response;
     try {
-      aiResp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-        body: JSON.stringify({ model: cfg.modelo_ia ?? "claude-haiku-4-5-20251001", max_tokens: 1024, system: systemPrompt, messages: messagesParaIA }),
+      aiResp = await callAnthropicMessages({
+        apiKey: ANTHROPIC_KEY,
+        model: cfg.modelo_ia,
+        system: systemPrompt,
+        messages: messagesParaIA,
+        maxTokens: 1024,
+        temperature: 0.4,
         signal: ac.signal,
       });
     } catch (e: any) {
@@ -783,6 +831,11 @@ async function handleWebhook(request: Request): Promise<Response> {
     // A Juliana resolve tudo sozinha; transferência para humano só acontece via ação manual no painel
     reply = reply.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
     const marcarHumano = false;
+
+    // [REVENDA]: a Juliana pré-qualificou um lead de revenda (consignado). Sinaliza pro setor
+    // responsável assumir (handoff de lead qualificado — exceção intencional ao "nunca transferir").
+    const tagRevenda = /\[REVENDA\]/i.test(reply);
+    reply = reply.replace(/\[REVENDA\]/gi, "").trim();
 
     // ─── Controle de follow-up por tags invisíveis emitidas pela IA ───────────
     // [COMPROU] = cliente confirmou compra; [PARAR] = pediu pra não insistir;
@@ -847,11 +900,16 @@ async function handleWebhook(request: Request): Promise<Response> {
         produtos_mostrados: Array.from(novosMostrados),
         tentativas_sem_resultado: novaTentativaSemResultado,
         ...fupUpdate,
+        ...(tagRevenda ? { precisa_humano: true, motivo_humano: "Revenda (consignado) - lead pré-qualificado pela Juliana", humano_em: new Date().toISOString() } : {}),
       }).eq("id", conversa.id).then(({ error }) => { if (error) console.error("[conversas update]", error); }),
       supabaseAdmin.from("clientes").update({
         produtos_vistos: Array.from(novosVistosIds),
         produtos_interesse: Array.from(novosInteresseIds),
         temperatura_lead: temp,
+        // Preenche a ficha do cliente (antes esses campos nunca eram gravados → IA sem memória de perfil).
+        ...(generoFiltro ? { genero_interesse: generoFiltro } : {}),
+        ...(precoMax ? { budget_aproximado: precoMax } : {}),
+        ...(categoriaPrincipal && intencaoCompra ? { categoria_favorita: categoriaPrincipal } : {}),
         ...(podeOferecerCupom && new RegExp(`\\b${(cfgAg?.cupom_negociacao_codigo ?? "JULIANA10")}\\b`, "i").test(reply) ? { cupom_negociacao_oferecido_em: new Date().toISOString() } : {}),
       }).eq("id", cliente.id).then(({ error }) => { if (error) console.error("[clientes update]", error); }),
     ]);
@@ -863,9 +921,21 @@ async function handleWebhook(request: Request): Promise<Response> {
     // ÁUDIO: a Juliana responde por voz nas mensagens conversacionais (sem link, curtas).
     // Link/preço e respostas longas continuam em texto. O Stevo busca a URL /api/public/voz,
     // que gera o áudio na hora. Falha no envio cai para texto — cliente nunca fica sem resposta.
+    // CANAL DA RESPOSTA (texto vs áudio) — escolhe o melhor momento:
+    // ÁUDIO em mensagens curtas e relacionais (saudação, rapport, acolhimento, "sou humana", elogio).
+    // TEXTO quando há algo pra LER/CLICAR/COPIAR (link, preço, CEP, cupom/código/pix) ou resposta longa.
     const replyTemLink = /https?:\/\/\S+/.test(reply);
+    const temInfoAcionavel =
+      replyTemLink ||
+      /r\$\s?\d/i.test(reply) ||                            // preço
+      /\b\d{5}-?\d{3}\b/.test(reply) ||                     // CEP
+      /\b(cupom|c[oó]digo|desconto|pix)\b/i.test(reply) ||  // cupom / código / pix
+      /\n\s*([-•]|\d[.\)])/.test(reply);                    // lista
+    const clienteMandouAudio = midiaTipo === "audio";
     const audioHabilitado = !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID;
-    const querAudio = audioHabilitado && !replyTemLink && reply.length <= 700;
+    // Sem info acionável e curta → vai de voz. Se o cliente mandou áudio, prioriza voz (espelho) e
+    // aceita um pouco mais longa. Mensagens com info acionável ou longas seguem em texto.
+    const querAudio = audioHabilitado && !temInfoAcionavel && reply.length <= (clienteMandouAudio ? 600 : 450);
     let audioEnviado = false;
     if (querAudio && msgAssistId) {
       const sec = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.STEVO_API_KEY || "";
@@ -897,18 +967,44 @@ async function handleWebhook(request: Request): Promise<Response> {
     const urlsProdutoFaltando = urlsNaResposta.filter((u) => /\/produtos\//i.test(u) && !urlsCobertas.has(u));
     if (urlsProdutoFaltando.length) {
       const { data: extras } = await supabaseAdmin.from("produtos")
-        .select("id,nome,preco,url_produto,url_foto")
+        .select("id,nome,preco,url_produto,url_foto,nuvemshop_product_id")
         .in("url_produto", urlsProdutoFaltando.slice(0, 3));
       for (const p of (extras ?? [])) if (p.url_foto && !candidatosFoto.some((c) => c.id === p.id)) candidatosFoto.push(p);
     }
-    const produtosMencionados = candidatosFoto.filter((p) => !enviadasSet.has(p.id)).slice(0, 3);
-    for (const p of produtosMencionados) {
+    // Respeita o toggle "Enviar foto do catálogo" do painel (default: ligado).
+    const enviarFotos = cfg?.enviar_foto_catalogo !== false;
+    const produtosMencionados = (enviarFotos ? candidatosFoto.filter((p) => !enviadasSet.has(p.id)) : []).slice(0, 3);
+
+    // FONTE MAIS CORRETA: ao mostrar o produto ao cliente, busca preço/estoque/foto/link AO VIVO
+    // na Nuvemshop. Se falhar, usa os dados sincronizados do banco (fallback — nunca fica sem card).
+    const connFoto = produtosMencionados.length ? await carregarConexaoNS(supabaseAdmin as any) : null;
+    const dadosLive = await Promise.all(
+      produtosMencionados.map((p) =>
+        connFoto && p.nuvemshop_product_id
+          ? buscarProdutoNuvemshopLive(connFoto, p.nuvemshop_product_id).catch(() => null)
+          : Promise.resolve(null),
+      ),
+    );
+    for (let i = 0; i < produtosMencionados.length; i++) {
+      const p = produtosMencionados[i];
+      const live = dadosLive[i];
+      // Esgotado na Nuvemshop (estoque definido e zerado) não é mostrado como disponível.
+      if (live && live.estoque != null && live.estoque <= 0) {
+        console.log("[foto] produto esgotado na Nuvemshop — não enviado:", p.id);
+        enviadasSet.add(p.id);
+        continue;
+      }
+      const nome = live?.nome ?? p.nome;
+      const preco = live?.preco ?? Number(p.preco);
+      const fotoUrl = live?.foto ?? p.url_foto;
+      const linkProd = live?.url ?? p.url_produto;
+      if (!fotoUrl) continue;
       await new Promise((r) => setTimeout(r, 300));
       try {
         const imgResp = await fetch("https://smv2-4.stevo.chat/send/media", {
           method: "POST",
           headers: { "Content-Type": "application/json", apikey: stevoKey },
-          body: JSON.stringify({ number: numero, type: "image", url: p.url_foto, caption: `${p.nome} — R$ ${Number(p.preco).toFixed(2).replace(".", ",")}${p.url_produto ? `\n${p.url_produto}` : ""}` }),
+          body: JSON.stringify({ number: numero, type: "image", url: fotoUrl, caption: `${nome} — R$ ${Number(preco).toFixed(2).replace(".", ",")}${linkProd ? `\n${linkProd}` : ""}` }),
           signal: AbortSignal.timeout(8000),
         });
         if (imgResp.ok) enviadasSet.add(p.id);
