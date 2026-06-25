@@ -817,14 +817,16 @@ export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer
   const voiceId = (process.env.ELEVENLABS_VOICE_ID ?? "").trim();
   if (!apiKey || !voiceId) return null;
 
-  // eleven_v3 = modelo mais humano/expressivo e entende audio tags ([laughs] etc). Latência maior,
-  // mas como é nota de voz assíncrona, tudo bem. Se o v3 falhar, cai para multilingual_v2.
-  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_v3").trim();
+  // Padrão eleven_multilingual_v2: voz muito natural em pt-BR e suporta "speed"/"style"
+  // (deixa bem menos robótico). Dá pra forçar outro modelo via ELEVENLABS_MODEL_ID.
+  const modelId = (process.env.ELEVENLABS_MODEL_ID ?? "eleven_multilingual_v2").trim();
   const ehV3 = /v3/i.test(modelId);
 
-  // v3: stability "Natural" (0.5) = expressivo e estável. v2: stability menor + leve style p/ emoção.
-  const settingsV3 = { stability: 0.5, similarity_boost: 0.8, use_speaker_boost: true };
-  const settingsV2 = { stability: 0.4, similarity_boost: 0.75, style: 0.25, use_speaker_boost: true };
+  // Ajustes p/ soar mais HUMANA (cliente chegou a perceber que era IA):
+  // - speed levemente acelerado (1.08): fala arrastada denuncia voz sintética;
+  // - stability mais baixa = entonação variada/natural; style p/ expressividade emocional.
+  const settingsV3 = { stability: 0.45, similarity_boost: 0.85, use_speaker_boost: true, speed: 1.08 };
+  const settingsV2 = { stability: 0.4, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true, speed: 1.08 };
 
   const pedir = (vid: string, model: string, text: string, settings: Record<string, unknown>) =>
     fetch(`https://api.elevenlabs.io/v1/text-to-speech/${vid}?output_format=mp3_44100_128`, {
