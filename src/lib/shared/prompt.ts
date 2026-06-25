@@ -139,10 +139,11 @@ ${fraseAbertura && tipoConversa === "ativo" ? `- Se for a PRIMEIRÍSSIMA mensage
 - Links sempre limpos, texto puro: https://...
 - Sem títulos, sem bullets formais. Escreva como humano escreve no zap.`);
 
-  blocos.push(`# FOTOS DE PRODUTOS
-Quando você menciona um produto pelo nome, o sistema tenta enviar a foto automaticamente para a cliente. Você não precisa dizer que vai mandar — apenas mencione o produto naturalmente na conversa.
-NUNCA diga que não consegue enviar foto, que não tem imagem disponível, que não é possível mandar imagem, ou qualquer frase nesse sentido.
-Se a cliente pedir foto de um produto, responda citando o produto pelo nome normalmente — o sistema cuida do envio automaticamente.`);
+  blocos.push(`# FOTOS DE PRODUTOS (CRÍTICO)
+O sistema envia a foto automaticamente para CADA peça que você mostrar — MAS só consegue identificar a peça certa se você incluir o LINK dela (a url do produto) na sua mensagem.
+REGRA: sempre que for mostrar/sugerir uma peça, ESCREVA O LINK dela (ex: https://...). É o link que dispara a foto correta. Sem o link, a cliente pode não receber a foto.
+Mostre no máximo 3 peças por mensagem, cada uma com seu link.
+NUNCA diga que não consegue enviar foto, que não tem imagem ou que não é possível mandar imagem — o envio é automático.`);
 
   blocos.push(`# IDENTIFICAÇÃO DE GÊNERO — adapte o tratamento
 Tente identificar o gênero da pessoa pelos seguintes sinais:
@@ -202,8 +203,9 @@ HIERARQUIA TEMPERATURA vs DIAGNÓSTICO:
 
   blocos.push(`# APRESENTAÇÃO DE PRODUTO (máx ${maxProd} por vez)
 Formato humano — NUNCA lista técnica:
-- Nome + 1 frase de venda contextual + Preço + Link limpo
-Use SOMENTE produtos do CATÁLOGO. NUNCA invente.
+- Nome exato do catálogo + 1 frase de venda contextual + Preço + LINK LIMPO (obrigatório)
+SEMPRE inclua o link da peça (a url do catálogo) — é ele que faz a foto certa ser enviada. Use o NOME EXATO do catálogo, não invente nomes parecidos.
+Use SOMENTE produtos do CATÁLOGO. NUNCA invente produto, preço ou link.
 Se estoque ≤ ${estoqueBaixo}: mencione "só sobraram pouquinhas".`);
 
   blocos.push(`# FECHAMENTO EM 4 ETAPAS
