@@ -925,6 +925,22 @@ async function handleWebhook(request: Request): Promise<Response> {
     const delayMs = 3000;
     await new Promise((r) => setTimeout(r, delayMs));
 
+    // ANTI-DUPLICAÇÃO DE ENVIO: se uma execução concorrente (reentrega do Stevo / mensagens quase
+    // simultâneas) já gerou uma resposta IDÊNTICA nesta conversa, só a MAIS ANTIGA envia — as demais
+    // abortam. Evita a Juliana mandar a mesma mensagem 2x (em áudio e/ou texto) no mesmo contexto.
+    if (msgAssistId) {
+      const noventaSeg = new Date(Date.now() - 90000).toISOString();
+      const { data: gemeas } = await supabaseAdmin.from("mensagens")
+        .select("id, criado_em").eq("conversa_id", conversa.id).eq("papel", "assistant")
+        .eq("conteudo", reply).gte("criado_em", noventaSeg);
+      const ordenadas = (gemeas ?? []).slice().sort((a: any, b: any) =>
+        a.criado_em !== b.criado_em ? (a.criado_em < b.criado_em ? -1 : 1) : (String(a.id) < String(b.id) ? -1 : 1));
+      if (ordenadas.length > 1 && ordenadas[0]?.id !== msgAssistId) {
+        console.log("[anti-dup-envio] resposta idêntica já em envio por outra execução — abortando envio");
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_send" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
+    }
+
     // ÁUDIO: a Juliana responde por voz nas mensagens conversacionais (sem link, curtas).
     // Link/preço e respostas longas continuam em texto. O Stevo busca a URL /api/public/voz,
     // que gera o áudio na hora. Falha no envio cai para texto — cliente nunca fica sem resposta.
