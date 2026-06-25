@@ -846,19 +846,14 @@ export async function gerarAudioElevenLabsBytes(texto: string): Promise<{ buffer
 
   try {
     let resp = await pedir(voiceId, modelId, textoFinal, ehV3 ? settingsV3 : settingsV2);
-    // Voz da biblioteca no plano grátis (402) → voz premade que funciona.
-    if (resp.status === 402 && voiceId !== VOZ_PREMADE_FALLBACK) {
-      console.warn("[tts] voz exige plano pago (402); usando voz premade fallback");
-      resp = await pedir(VOZ_PREMADE_FALLBACK, modelId, textoFinal, ehV3 ? settingsV3 : settingsV2);
-    }
-    // v3 indisponível/erro → cai para multilingual_v2 com o texto SEM audio tags (que ele leria literal).
+    // IMPORTANTE: NÃO trocamos para a voz premade (inglês) em caso de erro — isso degradava
+    // a qualidade pra uma voz robótica/estrangeira. Se a voz configurada falhar, retornamos null
+    // e o webhook envia em TEXTO (melhor do que uma voz ruim). Mantemos só o fallback de MODELO
+    // (mesma voz): se o v3 falhar, tenta multilingual_v2 com o mesmo voiceId.
     if (!resp.ok && ehV3) {
-      console.warn("[tts] v3 falhou (", resp.status, ") — caindo para multilingual_v2");
+      console.warn("[tts] v3 falhou (", resp.status, ") — caindo para multilingual_v2 (mesma voz)");
       const textoSimples = (prepararTextoParaVoz(texto, false) ?? textoFinal).slice(0, 800);
       resp = await pedir(voiceId, "eleven_multilingual_v2", textoSimples, settingsV2);
-      if (resp.status === 402 && voiceId !== VOZ_PREMADE_FALLBACK) {
-        resp = await pedir(VOZ_PREMADE_FALLBACK, "eleven_multilingual_v2", textoSimples, settingsV2);
-      }
     }
     if (!resp.ok) {
       console.error("[gerarAudioElevenLabsBytes] erro", resp.status, (await resp.text().catch(() => "")).slice(0, 200));
