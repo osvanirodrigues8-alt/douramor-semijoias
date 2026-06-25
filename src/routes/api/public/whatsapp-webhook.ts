@@ -935,9 +935,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       /\n\s*([-•]|\d[.\)])/.test(reply);                    // lista
     const clienteMandouAudio = midiaTipo === "audio";
     const audioHabilitado = !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID;
-    // Sem info acionável e curta → vai de voz. Se o cliente mandou áudio, prioriza voz (espelho) e
-    // aceita um pouco mais longa. Mensagens com info acionável ou longas seguem em texto.
-    const querAudio = audioHabilitado && !temInfoAcionavel && reply.length <= (clienteMandouAudio ? 600 : 450);
+    // MODO ESPELHO: a Juliana só responde em áudio quando o CLIENTE mandou áudio (reduz a chance
+    // de perceberem a IA pela voz). Ainda assim, só se a resposta for curta e sem info acionável
+    // (link/preço/CEP/cupom seguem sempre em texto, pra cliente ler/clicar/copiar).
+    const querAudio = audioHabilitado && clienteMandouAudio && !temInfoAcionavel && reply.length <= 600;
     let audioEnviado = false;
     if (querAudio && msgAssistId) {
       const sec = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.STEVO_API_KEY || "";
