@@ -3,7 +3,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
-const STEVO_URL = "https://sm-urso.stevo.chat/send/text";
+const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
 const LINK_AVALIACAO_BASE = "https://douramor-semijoias.vercel.app/avaliar";
 
 async function enviarPosVenda() {

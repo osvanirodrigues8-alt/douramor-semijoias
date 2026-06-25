@@ -914,8 +914,10 @@ async function handleWebhook(request: Request): Promise<Response> {
       }).eq("id", cliente.id).then(({ error }) => { if (error) console.error("[clientes update]", error); }),
     ]);
 
-    // Delay humanizador antes de enviar (simula tempo de digitação)
-    const delayMs = 10000;
+    // Delay humanizador antes de enviar (simula digitação). Mantido CURTO (3s): um delay longo
+    // fazia a função passar do tempo de entrega do Stevo, que reentregava a mensagem e gerava
+    // resposta dupla. 3s preserva o toque humano sem estourar esse limite (anti-dup é só backstop).
+    const delayMs = 3000;
     await new Promise((r) => setTimeout(r, delayMs));
 
     // ÁUDIO: a Juliana responde por voz nas mensagens conversacionais (sem link, curtas).
