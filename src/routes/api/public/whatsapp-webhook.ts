@@ -14,10 +14,12 @@ import {
   extrairKeywordsDeDescricao,
   normalizarMensagensIA,
   callAnthropicMessages,
+  detectaIntencaoPedido,
+  extrairNumeroPedido,
 } from "@/lib/shared/prompt";
 import crypto from "node:crypto";
 import { executarFluxo } from "@/lib/shared/fluxo-engine";
-import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, buscarProdutoNuvemshopLive, type OpcaoFrete } from "@/lib/shared/frete";
+import { extrairCep, detectaIntencaoFrete, carregarConexaoNS, calcularFreteNuvemshop, buscarProdutoNuvemshopLive, buscarPedidoNuvemshopLive, type OpcaoFrete } from "@/lib/shared/frete";
 import { detectarProblemasConversa, registrarFeedback } from "@/lib/shared/auditoria";
 
 const STEVO_URL = "https://smv2-4.stevo.chat/send/text";
@@ -702,6 +704,49 @@ async function handleWebhook(request: Request): Promise<Response> {
 
     const tentativasMax = Number(cfgAg?.tentativas_antes_escalar ?? TENTATIVAS_ESCALAR_DEFAULT);
 
+    // ─── Rastreamento de pedido (autonomia no pós-venda) ───────────────────────
+    // "Cadê meu pedido?" → consulta o sistema; status de envio/rastreio vem da Nuvemshop (mais correto).
+    let pedidoInfo: string | null = null;
+    let pedidoNaoEncontrado = false;
+    if (detectaIntencaoPedido(text)) {
+      const numPedido = extrairNumeroPedido(text);
+      const selPedido = "numero,status,valor_total,criado_em,nuvemshop_order_id,cliente_id";
+      let pedido: any = null;
+      if (numPedido) {
+        const { data } = await supabaseAdmin.from("pedidos").select(selPedido).eq("numero", numPedido).maybeSingle();
+        pedido = data ?? null;
+      }
+      if (!pedido && cliente?.id) {
+        const { data } = await supabaseAdmin.from("pedidos").select(selPedido)
+          .eq("cliente_id", cliente.id).order("criado_em", { ascending: false }).limit(1).maybeSingle();
+        pedido = data ?? null;
+      }
+      if (pedido) {
+        const statusPt: Record<string, string> = {
+          novo: "recebido", confirmado: "confirmado (pagamento aprovado)",
+          em_preparo: "em preparo/separação", enviado: "enviado, a caminho",
+          entregue: "entregue", cancelado: "cancelado",
+        };
+        let linha = `Pedido #${pedido.numero} — status: ${statusPt[pedido.status as string] ?? pedido.status}`;
+        const dataPed = pedido.criado_em ? new Date(pedido.criado_em).toLocaleDateString("pt-BR") : null;
+        if (dataPed) linha += ` — feito em ${dataPed}`;
+        if (pedido.nuvemshop_order_id) {
+          const conn = await carregarConexaoNS(supabaseAdmin as any);
+          if (conn) {
+            const ns = await buscarPedidoNuvemshopLive(conn, pedido.nuvemshop_order_id).catch(() => null);
+            if (ns) {
+              if (ns.envio) linha += ` — envio (Nuvemshop): ${ns.envio}`;
+              if (ns.rastreioCodigo) linha += ` — código de rastreio: ${ns.rastreioCodigo}`;
+              if (ns.rastreioUrl) linha += ` — rastrear: ${ns.rastreioUrl}`;
+            }
+          }
+        }
+        pedidoInfo = linha;
+      } else {
+        pedidoNaoEncontrado = true;
+      }
+    }
+
     const systemPrompt = buildSystemPrompt({
       cfg, cfgAg, produtos: produtosParaPrompt, cupons: cupons ?? [], faqs: faqs ?? [], canal: "whatsapp",
       cliente, produtosJaMostrados: jaMostrados, tipoConversa: tipoConv, temperatura: temp,
@@ -711,6 +756,7 @@ async function handleWebhook(request: Request): Promise<Response> {
       mensagemCitada: quotedText, urlCitada: quotedUrl,
       // Gênero "grudento": usa o da mensagem atual ou, se não houver, o salvo no cliente.
       generoCliente: generoFiltro ?? (cliente?.genero_interesse as any) ?? null,
+      pedidoInfo, pedidoNaoEncontrado,
     });
 
     // Montar histórico para a IA — a mensagem atual do usuário é adicionada SEPARADAMENTE (não está no hist)
@@ -786,6 +832,11 @@ async function handleWebhook(request: Request): Promise<Response> {
     reply = reply.replace(/\[ESCALAR_ATACADO\]/gi, "").replace(/\[ESCALAR\]/gi, "").trim();
     const marcarHumano = false;
 
+    // [REVENDA]: a Juliana pré-qualificou um lead de revenda (consignado). Sinaliza pro setor
+    // responsável assumir (handoff de lead qualificado — exceção intencional ao "nunca transferir").
+    const tagRevenda = /\[REVENDA\]/i.test(reply);
+    reply = reply.replace(/\[REVENDA\]/gi, "").trim();
+
     // ─── Controle de follow-up por tags invisíveis emitidas pela IA ───────────
     // [COMPROU] = cliente confirmou compra; [PARAR] = pediu pra não insistir;
     // [AGENDAR:N] = pediu retorno em N dias. Remove as tags e ajusta o follow-up
@@ -849,6 +900,7 @@ async function handleWebhook(request: Request): Promise<Response> {
         produtos_mostrados: Array.from(novosMostrados),
         tentativas_sem_resultado: novaTentativaSemResultado,
         ...fupUpdate,
+        ...(tagRevenda ? { precisa_humano: true, motivo_humano: "Revenda (consignado) - lead pré-qualificado pela Juliana", humano_em: new Date().toISOString() } : {}),
       }).eq("id", conversa.id).then(({ error }) => { if (error) console.error("[conversas update]", error); }),
       supabaseAdmin.from("clientes").update({
         produtos_vistos: Array.from(novosVistosIds),

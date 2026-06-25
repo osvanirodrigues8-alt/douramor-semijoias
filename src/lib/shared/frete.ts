@@ -294,6 +294,33 @@ export async function buscarProdutoNuvemshopLive(
   }
 }
 
+// Busca um PEDIDO ao vivo na Nuvemshop (fonte mais correta de status de envio e rastreio).
+export async function buscarPedidoNuvemshopLive(
+  conn: Conn,
+  orderId: string | number,
+): Promise<{ numero: number | null; status: string | null; pagamento: string | null; envio: string | null; rastreioCodigo: string | null; rastreioUrl: string | null } | null> {
+  try {
+    const res = await fetchComTimeout(
+      `${NS_API}/${conn.store_id}/orders/${orderId}`,
+      { headers: { Authentication: `bearer ${conn.access_token}`, "User-Agent": UA, "Content-Type": "application/json" } },
+      7000,
+    );
+    if (!res.ok) return null;
+    const o: any = await res.json().catch(() => null);
+    if (!o) return null;
+    return {
+      numero: o.number ?? null,
+      status: o.status ?? null,
+      pagamento: o.payment_status ?? null,
+      envio: o.shipping_status ?? o.fulfillment_status ?? null,
+      rastreioCodigo: o.shipping_tracking_number ?? null,
+      rastreioUrl: o.shipping_tracking_url ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function formatarOpcoes(opcoes: OpcaoFrete[]): string {
   return opcoes.map((o) => {
     const valor = o.preco === 0 ? "GRÁTIS" : `R$ ${o.preco.toFixed(2).replace(".", ",")}`;

@@ -40,8 +40,10 @@ export function buildSystemPrompt(opts: {
   mensagemCitada?: string | null;
   urlCitada?: string | null;
   generoCliente?: "masculino" | "feminino" | "unissex" | null;
+  pedidoInfo?: string | null;
+  pedidoNaoEncontrado?: boolean;
 }) {
-  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada, generoCliente } = opts;
+  const { cfg, cfgAg, produtos, cupons, faqs, canal, cliente, produtosJaMostrados, tipoConversa, temperatura, modoFollowup, podeOferecerCupom, descricaoMidia, instrucaoFluxo, cotacaoFrete, freteFalhou, pediuFretemasSemCep, tentativasEscalar, cepRecebidoAgora, categoriaPedida, mensagemCitada, urlCitada, generoCliente, pedidoInfo, pedidoNaoEncontrado } = opts;
 
   const nomeAgente = cfgAg?.nome_agente ?? cfg?.nome_agente ?? "Juliana";
   // O painel edita configuracoes.tom_padrao — ele tem prioridade. cfgAg.tom é fallback legado.
@@ -243,6 +245,48 @@ NUNCA mencione que vai passar para equipe humana ou que precisa esperar um atend
 Garantia: 1 ano contra defeitos de fabricação em todas as peças.
 ${politicaDesconto ? `Desconto: ${politicaDesconto}` : `Limite máx desconto: ${limiteDescNeg}%.`}
 ${regrasExtras ? `Outras regras: ${regrasExtras}` : ""}`);
+
+  // ── Conhecimento operacional (responda com segurança, sem inventar) ──────────
+  blocos.push(`# POLÍTICAS DA LOJA (responda com segurança, sem inventar)
+- Postagem: o pedido é postado em até 1 dia útil após a confirmação do pagamento.
+- Prazo de entrega: depende do CEP (Correios) — o prazo exato aparece no checkout ao informar o CEP.
+- Nota fiscal: emitimos nota fiscal em TODA compra.
+- Troca/devolução: até 7 dias após receber (direito de arrependimento) + garantia de 1 ano contra defeito de fabricação.
+- Embrulho para presente: NÃO temos embrulho de presente (vai na embalagem padrão) — não prometa embrulho especial. Você pode enviar para o endereço que o cliente escolher.
+- Pagamento: PIX (à vista), cartão de crédito (até 12x sem juros) e cartão de débito. NÃO aceitamos boleto. A compra é finalizada pelo link da peça no site (checkout).`);
+
+  blocos.push(`# TAMANHOS E MEDIDAS
+- Anel: o tamanho/aro disponível está nas variações da peça na loja (o link do produto já mostra as opções). Se a cliente não souber o aro, oriente a medir a circunferência do dedo com uma fitinha/barbante e ajude a escolher.
+- Corrente/colar: o tamanho (em cm) normalmente vem na descrição da peça — confira o anúncio do produto.
+- Pulseira: não tem tamanho específico (modelo único/ajustável).`);
+
+  blocos.push(`# CONFIANÇA (quando desconfiarem: "é golpe?", "tem CNPJ?")
+A Douramor é uma empresa registrada — passe segurança com naturalidade, nunca soe defensiva:
+- CNPJ: 61.295.526/0001-30.
+- Loja física real em Matozinhos-MG (R. Montes Claros, 700 — Loja A).
+- O pagamento é feito no site oficial, com checkout seguro (PIX/cartão).
+- Pode mencionar nossas redes sociais e as avaliações de clientes como prova de que somos reais e confiáveis.`);
+
+  blocos.push(`# REVENDA (CONSIGNADO) — pré-qualificação
+Trabalhamos com revenda 100% CONSIGNADA (NÃO vendemos atacado no momento — se pedirem atacado, explique isso com gentileza).
+Como funciona (apresente de forma atraente): a revendedora começa com cerca de 30 peças que ELA MESMA escolhe, SEM precisar comprar estoque; vende e faz o acerto a cada 45 dias, pagando só o que vendeu e devolvendo o que não vendeu (em bom estado). Não há venda mínima obrigatória. O ganho é de 20% a 40% conforme o valor das vendas, com bônus ao bater metas.
+Quando alguém demonstrar interesse em REVENDER, faça uma PRÉ-QUALIFICAÇÃO simpática, UMA pergunta por vez, descobrindo:
+1) Nome completo e CPF (precisamos de nome sem restrição — como é consignado, é baseado em confiança; peça o CPF com naturalidade, explicando que é para a análise de cadastro).
+2) Experiência com vendas.
+3) Cidade/região onde pretende revender.
+4) Disponibilidade e dedicação.
+5) Se já revende algo ou já tem clientela.
+6) Como pretende vender (Instagram, presencial, etc.).
+Ao concluir, diga que o perfil será analisado pelo setor responsável, que entra em contato para dar sequência — NÃO prometa aprovação. Finalize essa mensagem com a tag [REVENDA] no final (o sistema usa internamente; NUNCA comente sobre ela).`);
+
+  if (pedidoInfo) {
+    blocos.push(`# PEDIDO DO CLIENTE (status real do sistema — use estes dados)
+${pedidoInfo}
+Informe o status com clareza e tranquilidade. Se houver código/link de rastreio, passe para a cliente. Não invente datas que não estejam aqui.`);
+  } else if (pedidoNaoEncontrado) {
+    blocos.push(`# PEDIDO — NÃO LOCALIZADO
+Não encontrei um pedido vinculado a este contato. Peça com gentileza o NÚMERO do pedido (ou o e-mail/CPF usado na compra) para você localizar. NUNCA invente um status.`);
+  }
 
   // Controle interno de follow-up: a IA sinaliza eventos com tags que o sistema remove antes de enviar.
   blocos.push(`# CONTROLE INTERNO DE FOLLOW-UP (tags invisíveis)
@@ -459,6 +503,18 @@ export function detectarPedidoHumano(texto: string, palavrasExtras: string[] = [
 export function detectarIntencaoCompra(texto: string): boolean {
   const t = texto.toLowerCase();
   return /\b(quero|vou\s+levar|vou\s+comprar|fechar\s+pedido|como\s+(pago|fa[çc]o\s+(o\s+)?pedido|compr)|aceita\s+(cart[aã]o|pix|boleto)|finalizar|comprar\s+agora|pode\s+separar)\b/.test(t);
+}
+
+// Detecta que o cliente está perguntando sobre um pedido já feito (rastreamento/status).
+export function detectaIntencaoPedido(texto: string): boolean {
+  const t = texto.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /(cad[e]|onde).{0,15}(pedido|encomenda|compra)|rastrei|codigo de rastreio|meu pedido|minha encomenda|status do (meu )?pedido|ja (foi )?(enviad|postad|despachad)|previsao de entrega|quando.{0,12}chega|nao chegou|ainda nao (chegou|recebi)/.test(t);
+}
+
+// Extrai um número de pedido do texto, quando o cliente o informa (ex.: "pedido 1234", "#1234").
+export function extrairNumeroPedido(texto: string): number | null {
+  const m = texto.match(/pedido\s*(?:n[uº°o]?\.?\s*)?#?\s*(\d{1,8})/i) ?? texto.match(/#\s?(\d{2,8})/);
+  return m ? Number(m[1]) : null;
 }
 
 export function detectarTipoConversa(historico: { papel: string }[]): TipoConversa {
