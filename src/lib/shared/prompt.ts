@@ -760,6 +760,10 @@ export function prepararTextoParaVoz(texto: string, comTags = false): string | n
     .replace(/\b(?:k{2,}|rs(?:rs)+|ha(?:ha)+|he(?:he)+|hue(?:hue)+|hah|kkk)\b/gi, risada) // kkk/haha/rsrs → risada
     .replace(/[*_`~#>]/g, "")                                          // marcadores de markdown
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️]/gu, "") // emojis restantes
+    // Correções de pronúncia p/ o TTS ler certo em pt-BR:
+    .replace(/\bros[eé]\b/gi, "rosê")              // cor "rose"/"rosé" → "rosê" (senão sai "rouz")
+    .replace(/\b18\s?k\b/gi, "dezoito quilates")   // "18k" por extenso
+    .replace(/\bprata\s?925\b/gi, "prata novecentos e vinte e cinco")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();
