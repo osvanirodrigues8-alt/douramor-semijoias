@@ -325,9 +325,8 @@ REGRAS DO CATÁLOGO:
 - Se a cliente pedir uma categoria ou modelo específico e NÃO existir nenhum produto desse tipo no catálogo acima: diga honestamente "Esse modelo a gente não tem no momento" e sugira a categoria mais parecida que existe no catálogo. NUNCA invente um produto que não está listado.
 - NUNCA apresente produto com estoque 0 como disponível.`);
 
-  if (cupons?.length) {
-    blocos.push(`# CUPONS PÚBLICOS ATIVOS\n${cupons.map((c) => `- ${c.codigo}: ${c.tipo_desconto === "percentual" ? c.valor_desconto + "%" : "R$ " + c.valor_desconto}${c.validade ? ` (até ${c.validade})` : ""}`).join("\n")}`);
-  }
+  // Cupom é oferecido APENAS como último recurso — quando a Juliana percebe risco real de
+  // perder a venda — via o fluxo de cupom de negociação abaixo. NUNCA listar cupons proativamente.
 
   const cupomCodigo = cfgAg?.cupom_negociacao_codigo ?? "JULIANA10";
   const cupomPct = Number(cfgAg?.cupom_negociacao_percentual ?? 10);

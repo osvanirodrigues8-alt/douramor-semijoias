@@ -869,9 +869,21 @@ async function handleWebhook(request: Request): Promise<Response> {
     // ÁUDIO: a Juliana responde por voz nas mensagens conversacionais (sem link, curtas).
     // Link/preço e respostas longas continuam em texto. O Stevo busca a URL /api/public/voz,
     // que gera o áudio na hora. Falha no envio cai para texto — cliente nunca fica sem resposta.
+    // CANAL DA RESPOSTA (texto vs áudio) — escolhe o melhor momento:
+    // ÁUDIO em mensagens curtas e relacionais (saudação, rapport, acolhimento, "sou humana", elogio).
+    // TEXTO quando há algo pra LER/CLICAR/COPIAR (link, preço, CEP, cupom/código/pix) ou resposta longa.
     const replyTemLink = /https?:\/\/\S+/.test(reply);
+    const temInfoAcionavel =
+      replyTemLink ||
+      /r\$\s?\d/i.test(reply) ||                            // preço
+      /\b\d{5}-?\d{3}\b/.test(reply) ||                     // CEP
+      /\b(cupom|c[oó]digo|desconto|pix)\b/i.test(reply) ||  // cupom / código / pix
+      /\n\s*([-•]|\d[.\)])/.test(reply);                    // lista
+    const clienteMandouAudio = midiaTipo === "audio";
     const audioHabilitado = !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID;
-    const querAudio = audioHabilitado && !replyTemLink && reply.length <= 700;
+    // Sem info acionável e curta → vai de voz. Se o cliente mandou áudio, prioriza voz (espelho) e
+    // aceita um pouco mais longa. Mensagens com info acionável ou longas seguem em texto.
+    const querAudio = audioHabilitado && !temInfoAcionavel && reply.length <= (clienteMandouAudio ? 600 : 450);
     let audioEnviado = false;
     if (querAudio && msgAssistId) {
       const sec = process.env.WHATSAPP_WEBHOOK_SECRET || process.env.STEVO_API_KEY || "";
