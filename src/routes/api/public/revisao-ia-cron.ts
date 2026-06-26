@@ -165,7 +165,8 @@ async function handleCronRequest(request: Request): Promise<Response> {
   if (secret) {
     const url = new URL(request.url);
     const provided = request.headers.get("x-cron-secret") ?? url.searchParams.get("secret");
-    if (provided !== secret) return new Response("Unauthorized", { status: 401, headers: cors });
+    const bearerOk = request.headers.get("authorization") === `Bearer ${secret}`;
+    if (!bearerOk && provided !== secret) return new Response("Unauthorized", { status: 401, headers: cors });
   }
 
   try {

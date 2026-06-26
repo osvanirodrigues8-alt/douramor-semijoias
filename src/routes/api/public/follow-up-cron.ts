@@ -17,7 +17,9 @@ async function handleCronRequest(request: Request, label: string): Promise<Respo
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-    if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+    // Vercel Cron envia o secret como "Authorization: Bearer ${CRON_SECRET}".
+    const bearerOk = request.headers.get("authorization") === `Bearer ${secret}`;
+    if (!bearerOk && provided !== secret) return new Response("Unauthorized", { status: 401 });
   }
   try {
     const result = await processFollowUps();

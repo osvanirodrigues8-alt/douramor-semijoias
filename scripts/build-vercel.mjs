@@ -101,6 +101,14 @@ writeFileSync(join(outDir, 'config.json'), JSON.stringify({
     // Tudo que não for estático → Node.js SSR
     { src: '^/(.*)$', dest: '/render' },
   ],
+  // Cron jobs (Vercel agenda e autentica com Authorization: Bearer ${CRON_SECRET}).
+  // Plano Hobby: cada cron roda 1x/dia (horários em UTC; BRT = UTC-3).
+  crons: [
+    { path: '/api/public/follow-up-cron', schedule: '0 13 * * *' },        // ~10h BRT — retornos
+    { path: '/api/public/pos-venda-cron', schedule: '0 14 * * *' },        // ~11h BRT — pós-venda
+    { path: '/api/public/hooks/sync-nuvemshop-products', schedule: '0 9 * * *' }, // ~6h BRT — sync catálogo
+    { path: '/api/public/revisao-ia-cron', schedule: '0 5 * * *' },        // ~2h BRT — auditoria interna
+  ],
 }))
 
 console.log('✅ Vercel output gerado em .vercel/output/')

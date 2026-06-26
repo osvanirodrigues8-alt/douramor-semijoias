@@ -122,7 +122,8 @@ export const Route = createFileRoute("/api/public/pos-venda-cron")({
         const secret = process.env.CRON_SECRET;
         if (secret) {
           const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+          const bearerOk = request.headers.get("authorization") === `Bearer ${secret}`;
+          if (!bearerOk && provided !== secret) return new Response("Unauthorized", { status: 401 });
         }
         try {
           const result = await run();
@@ -137,7 +138,8 @@ export const Route = createFileRoute("/api/public/pos-venda-cron")({
         const secret = process.env.CRON_SECRET;
         if (secret) {
           const provided = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-          if (provided !== secret) return new Response("Unauthorized", { status: 401 });
+          const bearerOk = request.headers.get("authorization") === `Bearer ${secret}`;
+          if (!bearerOk && provided !== secret) return new Response("Unauthorized", { status: 401 });
         }
         const result = await run();
         return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
