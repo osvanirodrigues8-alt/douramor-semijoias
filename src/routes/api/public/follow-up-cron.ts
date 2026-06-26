@@ -22,7 +22,8 @@ async function handleCronRequest(request: Request, label: string): Promise<Respo
     if (!bearerOk && provided !== secret) return new Response("Unauthorized", { status: 401 });
   }
   try {
-    const result = await processFollowUps();
+    const limit = Math.max(1, Math.min(50, Number(new URL(request.url).searchParams.get("limit") ?? 50)));
+    const result = await processFollowUps(limit);
     console.log(`[${label}]`, JSON.stringify(result).slice(0, 1000));
     return new Response(JSON.stringify(result), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
@@ -31,7 +32,7 @@ async function handleCronRequest(request: Request, label: string): Promise<Respo
   }
 }
 
-async function processFollowUps() {
+async function processFollowUps(maxToProcess = 50) {
   const [{ data: cfg }, { data: cfgAg }] = await Promise.all([
     supabaseAdmin.from("configuracoes").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
     supabaseAdmin.from("configuracoes_agente").select("*").order("atualizado_em", { ascending: false }).limit(1).maybeSingle(),
@@ -69,6 +70,8 @@ async function processFollowUps() {
 
   const elegiveis = conversasFiltradas.filter((c) => !c.proximo_followup_em || c.proximo_followup_em <= agora);
   if (!elegiveis.length) return { ok: true, processadas: 0 };
+  // Limita quantos processa por chamada (o disparo pausado chama com limit=1 p/ não bloquear o WhatsApp).
+  const lote = elegiveis.slice(0, maxToProcess);
 
   const [{ data: produtosTodos }, { data: cupons }, { data: faqs }] = await Promise.all([
     supabaseAdmin.from("produtos").select("id,nome,categoria,genero,preco,descricao,quantidade_estoque,status,url_produto").eq("status", "disponivel").limit(60),
@@ -78,7 +81,8 @@ async function processFollowUps() {
 
   const resultados: any[] = [];
 
-  for (const conv of elegiveis) {
+  for (const [i, conv] of lote.entries()) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1500)); // espaçamento entre envios na mesma chamada
     try {
       const [{ data: histRaw }, { data: cliente }] = await Promise.all([
         // Correção PROBLEMA 6: pegar as ÚLTIMAS 30 mensagens (desc) e inverter para ordem cronológica
