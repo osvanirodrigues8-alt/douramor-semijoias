@@ -948,11 +948,63 @@ export async function callAnthropicMessages(params: {
       body: montarBody(model),
       signal: params.signal,
     });
-  let resp = await enviar(modeloConfig);
-  if (!resp.ok && modeloConfig !== MODELO_FALLBACK_IA && [400, 403, 404].includes(resp.status)) {
-    console.warn(`[anthropic] modelo ${modeloConfig} falhou (${resp.status}) — caindo para ${MODELO_FALLBACK_IA}`);
-    resp = await enviar(MODELO_FALLBACK_IA);
+
+  // Sleep que aborta junto com o signal (não desperdiça o budget de 25s esperando à toa).
+  const sleepAbortavel = (ms: number) =>
+    new Promise<void>((resolve, reject) => {
+      if (params.signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
+      const t = setTimeout(resolve, ms);
+      params.signal?.addEventListener("abort", () => { clearTimeout(t); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+    });
+
+  // Erros transitórios: vale a pena tentar de novo (rate limit / sobrecarga / 5xx temporário).
+  // 400/401/403/404/413 = erro permanente do request → não retenta.
+  const ehTransitorio = (status: number) => status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 529;
+
+  const MAX_TENTATIVAS = 3; // 1 + 2 retries — cabe no budget de 25s do chamador
+  let resp: Response | null = null;
+
+  for (let tentativa = 0; tentativa < MAX_TENTATIVAS; tentativa++) {
+    try {
+      resp = await enviar(modeloConfig);
+    } catch (e: any) {
+      // AbortError (timeout do chamador) propaga — o webhook tem tratamento próprio pra isso.
+      if (e?.name === "AbortError") throw e;
+      // Erro de REDE (fetch rejeitou): não deixar virar throw → 500 → Stevo reentrega → duplicação.
+      // Retenta; se esgotar, retorna 503 sintético pro path gracioso (!resp.ok) do webhook.
+      console.warn(`[anthropic] erro de rede (tentativa ${tentativa + 1}/${MAX_TENTATIVAS}):`, e?.message ?? e);
+      if (tentativa < MAX_TENTATIVAS - 1) {
+        await sleepAbortavel(Math.round((700 * 2 ** tentativa) + Math.random() * 300));
+        continue;
+      }
+      return new Response(JSON.stringify({ error: "network", detail: String(e?.message ?? e) }), { status: 503 });
+    }
+
+    // Fallback de modelo: modelo configurado inválido/indisponível → cai pro modelo padrão (1x).
+    if (!resp.ok && modeloConfig !== MODELO_FALLBACK_IA && [400, 403, 404].includes(resp.status)) {
+      console.warn(`[anthropic] modelo ${modeloConfig} falhou (${resp.status}) — caindo para ${MODELO_FALLBACK_IA}`);
+      try {
+        resp = await enviar(MODELO_FALLBACK_IA);
+      } catch (e: any) {
+        if (e?.name === "AbortError") throw e;
+        return new Response(JSON.stringify({ error: "network", detail: String(e?.message ?? e) }), { status: 503 });
+      }
+    }
+
+    if (resp.ok || !ehTransitorio(resp.status)) return resp;
+
+    // Transitório: backoff exp + jitter. Honra Retry-After se vier curto (≤5s).
+    if (tentativa < MAX_TENTATIVAS - 1) {
+      const retryAfter = Number(resp.headers.get("retry-after"));
+      const esperaHeader = Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 5 ? retryAfter * 1000 : 0;
+      const espera = esperaHeader || Math.round((700 * 2 ** tentativa) + Math.random() * 300);
+      console.warn(`[anthropic] ${resp.status} transitório — retry ${tentativa + 1}/${MAX_TENTATIVAS - 1} em ${espera}ms`);
+      await sleepAbortavel(espera);
+      continue;
+    }
   }
-  return resp;
+
+  // Esgotou as tentativas num status transitório — devolve a última resposta (não-ok) pro path gracioso.
+  return resp!;
 }
 

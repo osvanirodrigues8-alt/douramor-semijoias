@@ -427,6 +427,15 @@ async function handleWebhook(request: Request): Promise<Response> {
     const baseMsgUser = { conversa_id: conversa.id, papel: "user", conteudo: text, midia_tipo: midiaTipo, midia_url: midiaUrl, midia_transcricao: midiaTranscricao };
     const { error: errMsgUser } = await supabaseAdmin.from("mensagens").insert({ ...baseMsgUser, ...(messageId ? { stevo_message_id: messageId } : {}) } as any);
     if (errMsgUser) {
+      // IDEMPOTÊNCIA ATÔMICA: violação de unicidade (23505) no stevo_message_id = outra execução
+      // concorrente já está processando ESTE mesmo message_id. Esta execução desiste ANTES de gerar
+      // e enviar a resposta — é o que de fato impede a resposta duplicada (dedup no nível do banco,
+      // sem depender dos heurísticos por conteúdo+tempo). Requer o índice UNIQUE da migration
+      // 20260626000001_stevo_message_id_unique.sql.
+      if ((errMsgUser as any)?.code === "23505") {
+        console.log("[idempotencia-atomica] message_id já em processamento por outra execução — abortando:", messageId);
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_message_id_race" }), { headers: { ...cors, "Content-Type": "application/json" } });
+      }
       // Resiliência: se a coluna stevo_message_id ainda não existir no banco, salvar sem ela
       // (garante que a mensagem do usuário NUNCA seja perdida, mesmo antes da migration rodar)
       console.error("[mensagens insert user]", errMsgUser);
